@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Underground Radar</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@200;300;400&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --border: #1c1c1c;
+      --border-hover: #2e2e2e;
+      --text-primary: #e8e8e8;
+      --text-secondary: #888;
+      --text-muted: #444;
+      --accent: #c8ff00;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      padding: 56px 24px 80px;
+    }
+    header {
+      max-width: 760px;
+      margin: 0 auto 52px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .header-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    header h1 {
+      font-size: 36px;
+      font-weight: 200;
+      letter-spacing: -0.03em;
+      color: var(--text-primary);
+      line-height: 1.1;
+    }
+    header h1 span { color: var(--accent); }
+    .controls {
+      max-width: 760px;
+      margin: 0 auto 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    input[type="date"] {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 10px 14px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    input[type="date"]:focus { border-color: var(--border-hover); }
+    .btn {
+      padding: 10px 20px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border-radius: 4px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: #0a0a0a; }
+    .btn-primary:hover { background: #d4ff1a; }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { color: var(--text-secondary); border-color: var(--border-hover); }
+    .add-bar {
+      max-width: 760px;
+      margin: 0 auto 28px;
+    }
+    .btn-add {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px dashed #2a2a2a;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-add:hover { color: var(--accent); border-color: var(--accent); }
+    .add-form {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .add-form input[type="text"] {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 10px 14px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      border-radius: 4px;
+      outline: none;
+      width: 280px;
+      transition: border-color 0.15s;
+    }
+    .add-form input[type="text"]:focus { border-color: var(--accent); }
+    .add-form input[type="text"]::placeholder { color: var(--text-muted); }
+    .add-msg {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+    .add-msg.success { color: var(--accent); }
+    .add-msg.error { color: #ff4444; }
+    .status {
+      max-width: 760px;
+      margin: 0 auto 20px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+    }
+    .events {
+      max-width: 760px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .event-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      min-height: 110px;
+      transition: border-color 0.15s;
+    }
+    .event-card:hover { border-color: var(--border-hover); }
+    .event-date-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px 20px;
+      border-right: 1px solid var(--border);
+      min-width: 72px;
+      flex-shrink: 0;
+    }
+    .event-day {
+      font-family: 'DM Mono', monospace;
+      font-size: 26px;
+      font-weight: 300;
+      color: var(--text-primary);
+      line-height: 1;
+    }
+    .event-month {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+    .event-weekday {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      color: #333;
+      margin-top: 2px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .event-body {
+      flex: 1;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 0;
+    }
+    .event-place {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+      unicode-bidi: plaintext;
+      text-align: start;
+    }
+    .event-title {
+      font-size: 15px;
+      font-weight: 400;
+      color: var(--text-primary);
+      line-height: 1.35;
+      margin-bottom: 6px;
+      unicode-bidi: plaintext;
+      text-align: start;
+    }
+    .event-desc {
+      font-size: 12px;
+      font-weight: 300;
+      color: var(--text-secondary);
+      line-height: 1.55;
+      unicode-bidi: plaintext;
+      text-align: start;
+      margin-bottom: 8px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .event-footer {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: auto;
+    }
+    .event-time {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+    .event-link {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+      text-decoration: none;
+      letter-spacing: 0.06em;
+      transition: color 0.15s;
+    }
+    .event-link:hover { color: var(--accent); }
+    .event-image-wrap {
+      width: 110px;
+      flex-shrink: 0;
+      overflow: hidden;
+      background: #0e0e0e;
+    }
+    .event-image {
+      width: 110px;
+      height: 100%;
+      min-height: 110px;
+      object-fit: cover;
+      display: block;
+    }
+    .event-image-placeholder {
+      width: 110px;
+      min-height: 110px;
+      background: #0e0e0e;
+      flex-shrink: 0;
+    }
+    .empty {
+      text-align: center;
+      color: var(--text-muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      padding: 72px 0;
+      letter-spacing: 0.08em;
+    }
+    .loading {
+      text-align: center;
+      color: var(--text-muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      padding: 72px 0;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-label">Tel Aviv · Jerusalem</div>
+  <h1>Underground <span>Radar</span></h1>
+</header>
+
+<div class="controls">
+  <input type="date" id="date-picker"/>
+  <button class="btn btn-primary" onclick="loadEvents()">Search</button>
+  <button class="btn btn-secondary" onclick="loadAll()">All upcoming</button>
+</div>
+
+<div class="add-bar">
+  <button class="btn-add" id="add-toggle" onclick="toggleAdd()">+ add place</button>
+  <div class="add-form" id="add-form" style="display:none">
+    <input type="text" id="place-name" placeholder="place name..." />
+    <input type="text" id="place-url" placeholder="website URL (e.g. https://matmon.space)" />
+    <input type="text" id="place-city" placeholder="city (optional)" />
+    <button class="btn btn-primary" onclick="addPlace()">add</button>
+    <button class="btn btn-secondary" onclick="toggleAdd()">cancel</button>
+    <span class="add-msg" id="add-msg"></span>
+  </div>
+</div>
+
+<div class="status" id="status"></div>
+<div class="events" id="events-container">
+  <div class="empty">pick a date or view all upcoming</div>
+</div>
+
+<script>
+  var SUPABASE_URL = 'https://qmbdtswkeaayvsufphav.supabase.co';
+  var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFtYmR0c3drZWFheXZzdWZwaGF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMjY0NzAsImV4cCI6MjA5NTkwMjQ3MH0.fXoKolW6C5cMysI--OsV3RIG3JdqqOqrlTht0_A9SD0';
+
+  var today = new Date().toISOString().split('T')[0];
+  document.getElementById('date-picker').value = today;
+
+  var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function toggleAdd() {
+    var form = document.getElementById('add-form');
+    var isHidden = form.style.display === 'none';
+    form.style.display = isHidden ? 'flex' : 'none';
+    if (isHidden) document.getElementById('place-name').focus();
+    document.getElementById('add-msg').textContent = '';
+  }
+
+  ffunction addPlace() {
+    var name = document.getElementById('place-name').value.trim();
+    var url = document.getElementById('place-url').value.trim();
+    var city = document.getElementById('place-city').value.trim();
+    var msg = document.getElementById('add-msg');
+
+    if (!name) {
+      msg.textContent = 'enter a place name';
+      msg.className = 'add-msg error';
+      return;
+    }
+
+    if (!url) {
+      msg.textContent = 'enter a website URL';
+      msg.className = 'add-msg error';
+      return;
+    }
+
+    if (!url.startsWith('http')) {
+      url = 'https://' + url;
+    }
+
+    msg.textContent = 'adding...';
+    msg.className = 'add-msg';
+
+    fetch('http://localhost:3001/add-place', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, url: url, city: city || 'Tel Aviv' })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.success) {
+        msg.textContent = '✓ added — scraping started';
+        msg.className = 'add-msg success';
+        document.getElementById('place-name').value = '';
+        document.getElementById('place-url').value = '';
+        document.getElementById('place-city').value = '';
+      } else {
+        msg.textContent = 'error: ' + (data.error || 'unknown');
+        msg.className = 'add-msg error';
+      }
+    })
+    .catch(function() {
+      msg.textContent = 'error — is server.js running?';
+      msg.className = 'add-msg error';
+    });
+  }
+    })
+    .catch(function() {
+      msg.textContent = 'error — is server.js running?';
+      msg.className = 'add-msg error';
+    });
+  }
+
+  function loadEvents() {
+    var date = document.getElementById('date-picker').value;
+    if (!date) return;
+    var start = date + 'T00:00:00';
+    var end = date + 'T23:59:59';
+    runQuery('event_date=gte.' + start + '&event_date=lte.' + end);
+  }
+
+  function loadAll() {
+    var now = new Date().toISOString();
+    runQuery('event_date=gte.' + now);
+  }
+
+  function runQuery(filter) {
+    var container = document.getElementById('events-container');
+    var status = document.getElementById('status');
+    container.innerHTML = '<div class="loading">scanning...</div>';
+    var url = SUPABASE_URL + '/rest/v1/events?select=*,places(name)&' + filter + '&order=event_date.asc';
+    fetch(url, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY
+      }
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(events) {
+      if (!events.length) {
+        container.innerHTML = '<div class="empty">nothing found</div>';
+        status.textContent = '';
+        return;
+      }
+      status.textContent = events.length + ' event' + (events.length !== 1 ? 's' : '') + ' found';
+      container.innerHTML = events.map(function(e) { return renderCard(e); }).join('');
+    })
+    .catch(function(err) {
+      container.innerHTML = '<div class="empty">error: ' + err.message + '</div>';
+    });
+  }
+
+  function renderCard(e) {
+    var d = e.event_date ? new Date(e.event_date) : null;
+    var day = d ? d.getDate() : '?';
+    var month = d ? MONTHS[d.getMonth()] : '';
+    var weekday = d ? DAYS[d.getDay()] : '';
+    var time = d ? d.toLocaleTimeString('en-IL', { hour: '2-digit', minute: '2-digit' }) : '';
+    var place = e.places ? e.places.name : '';
+
+    var imgHtml = e.image_url
+      ? '<div class="event-image-wrap"><img class="event-image" src="' + e.image_url + '" onerror="this.parentElement.innerHTML=\'\'"/></div>'
+      : '<div class="event-image-placeholder"></div>';
+
+    var linkHtml = e.source_url
+      ? '<a class="event-link" href="' + e.source_url + '" target="_blank">↗ view event</a>'
+      : '';
+
+    return '<div class="event-card">' +
+      '<div class="event-date-col">' +
+        '<div class="event-day">' + day + '</div>' +
+        '<div class="event-month">' + month + '</div>' +
+        '<div class="event-weekday">' + weekday + '</div>' +
+      '</div>' +
+      '<div class="event-body">' +
+        '<div class="event-place">' + place + '</div>' +
+        '<div class="event-title">' + (e.title || '') + '</div>' +
+        (e.description ? '<div class="event-desc">' + e.description + '</div>' : '') +
+        '<div class="event-footer">' +
+          (time ? '<span class="event-time">' + time + '</span>' : '') +
+          linkHtml +
+        '</div>' +
+      '</div>' +
+      imgHtml +
+    '</div>';
+  }
+</script>
+</body>
+</html>

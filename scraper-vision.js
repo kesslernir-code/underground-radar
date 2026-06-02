@@ -2,10 +2,16 @@ require('dotenv').config();
 const puppeteer = require('puppeteer');
 const Anthropic = require('@anthropic-ai/sdk');
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_KEY,
+  {
+    realtime: {
+      transport: ws
+    }
+  }
 );
 
 const anthropic = new Anthropic({

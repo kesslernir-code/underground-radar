@@ -367,7 +367,7 @@
     msg.textContent = 'adding...';
     msg.className = 'add-msg';
 
-    fetch('http://localhost:3001/add-place', {
+    fetch('/add-place', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: name, url: url, city: city || 'Tel Aviv' })
@@ -466,4 +466,4 @@
   }
 </script>
 </body>
-</html>
+</html>                     

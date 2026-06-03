@@ -1,5 +1,7 @@
 require('dotenv').config();
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
@@ -316,6 +318,24 @@ const server = http.createServer(async function(req, res) {
     return;
   }
 
+  // Serve the frontend at /kessler-time
+  if (req.method === 'GET' && (req.url === '/kessler-time' || req.url === '/kessler-time/')) {
+    var indexPath = path.join(__dirname, 'index.html');
+    fs.readFile(indexPath, function(err, data) {
+      if (err) { res.writeHead(500); res.end('Error loading page'); return; }
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(data);
+    });
+    return;
+  }
+
+  // Redirect root to /kessler-time
+  if (req.method === 'GET' && req.url === '/') {
+    res.writeHead(302, { 'Location': '/kessler-time' });
+    res.end();
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/add-place') {
     var body = '';
     req.on('data', function(chunk) { body += chunk; });
@@ -344,30 +364,4 @@ const server = http.createServer(async function(req, res) {
 
         var placeId = result.data[0].id;
         console.log('\n✅ Place saved: ' + name);
-
-        res.writeHead(200);
-        res.end(JSON.stringify({
-          success: true,
-          message: '"' + name + '" added — scraping started'
-        }));
-
-        scrapePlace(placeId, name, url).catch(function(err) {
-          console.log('Scraper error: ' + err.message);
-        });
-
-      } catch (err) {
-        res.writeHead(400);
-        res.end(JSON.stringify({ error: 'Invalid request' }));
-      }
-    });
-    return;
-  }
-
-  res.writeHead(404);
-  res.end();
-});
-
-server.listen(3001, function() {
-  console.log('🚀 Server on http://localhost:3001');
-  console.log('   3-layer scraper: DOM links → Vision → Google search');
-});
+

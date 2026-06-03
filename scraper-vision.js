@@ -11,22 +11,39 @@ const supabase = createClient(
 );
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 
+// Extract JSON array or object from a Claude response that may include extra text
+function extractJSON(text) {
+  const cleaned = text.trim().replace(/```json|```/g, '').trim();
+  // Find the first [ or { and the matching closing bracket
+  const arrStart = cleaned.indexOf('[');
+  const objStart = cleaned.indexOf('{');
+  if (arrStart === -1 && objStart === -1) throw new Error('No JSON found');
+  const start = (arrStart === -1) ? objStart : (objStart === -1) ? arrStart : Math.min(arrStart, objStart);
+  const isArr = cleaned[start] === '[';
+  const end = isArr ? cleaned.lastIndexOf(']') : cleaned.lastIndexOf('}');
+  if (end === -1) throw new Error('No closing bracket found');
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
 async function openPage(browser, url) {
   const page = await browser.newPage();
-  page.setDefaultNavigationTimeout(60000);
+  page.setDefaultNavigationTimeout(45000);
   await page.setViewport({ width: 1280, height: 900 });
   try {
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-  } catch {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    // Use domcontentloaded + short wait instead of networkidle2 (avoids hanging on slow sites)
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  } catch (e) {
+    // If even that fails, just continue with whatever loaded
+    console.log('    (page load warning: ' + e.message.slice(0, 60) + ')');
   }
   await new Promise(r => setTimeout(r, 3000));
   await page.evaluate(() => window.scrollBy(0, 1000));
-  await new Promise(r => setTimeout(r, 2000));
+  await new Promise(r => setTimeout(r, 1500));
   return page;
 }
 
-// STRATEGY 0: Parse listing page directly — best for sites that show all event info on one page
+// STRATEGY 0: Parse listing page directly
+// Returns { events, foundAny } — foundAny=true means the page had events (even if all were duplicates)
 async function tryDirectParse(browser, url, placeName) {
   console.log('  [Try 0] Direct HTML parse...');
   try {
@@ -57,7 +74,7 @@ async function tryDirectParse(browser, url, placeName) {
       model: 'claude-sonnet-4-5', max_tokens: 4096,
       messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
     });
-    const events = JSON.parse(msg.content[0].text.trim().replace(/```json|```/g, '').trim());
+    const events = extractJSON(msg.content[0].text);
     console.log('  [Try 0] Found ' + events.length + ' events');
     return events;
   } catch (err) {
@@ -97,7 +114,7 @@ async function tryLinkExtract(browser, url, place_id) {
       model: 'claude-sonnet-4-5', max_tokens: 1024,
       messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
     });
-    const eventLinks = JSON.parse(msg.content[0].text.trim().replace(/```json|```/g, '').trim());
+    const eventLinks = extractJSON(msg.content[0].text);
 
     const newLinks = [];
     for (var i = 0; i < eventLinks.length; i++) {
@@ -137,7 +154,7 @@ async function scrapeEventPage(browser, url) {
       model: 'claude-sonnet-4-5', max_tokens: 1024,
       messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
     });
-    const data = JSON.parse(msg.content[0].text.trim().replace(/```json|```/g, '').trim());
+    const data = extractJSON(msg.content[0].text);
     return {
       title: data.title, event_date: data.event_date, description: data.description,
       image_url: data.image_index >= 0 ? (pd.images[data.image_index] || null) : null,
@@ -164,7 +181,7 @@ async function tryScreenshotVision(browser, url, placeName) {
       'Events page for "' + placeName + '". Available images:\n' +
       (imageUrls.slice(0, 30).map(function(u, i) { return i + ': ' + u; }).join('\n') || 'none') + '\n\n' +
       'Extract ALL upcoming events visible in the screenshot.\n' +
-      'Return ONLY a JSON array:\n' +
+      'Return ONLY a JSON array, no explanation before or after:\n' +
       '[{"title":"...","event_date":"2026-06-15T20:00:00","description":"...","event_url":"url or null","image_index":0}]\n' +
       'If no events: []';
 
@@ -175,7 +192,7 @@ async function tryScreenshotVision(browser, url, placeName) {
         { type: 'text', text: prompt }
       ]}]
     });
-    const events = JSON.parse(msg.content[0].text.trim().replace(/```json|```/g, '').trim());
+    const events = extractJSON(msg.content[0].text);
     console.log('  [Try 2] Found ' + events.length + ' events');
     return events.map(function(e) {
       return {
@@ -199,14 +216,14 @@ async function tryWebSearch(placeName) {
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       messages: [{ role: 'user', content:
         'Search for upcoming events at the Israeli venue "' + placeName + '" in 2026.\n' +
-        'Return ONLY a JSON array:\n' +
+        'Return ONLY a JSON array, no explanation:\n' +
         '[{"title":"...","event_date":"2026-06-15T20:00:00","description":"...","source_url":"...","image_url":null}]\n' +
         'If no events: []'
       }]
     });
     const tb = msg.content.find(function(b) { return b.type === 'text'; });
     if (!tb) return [];
-    const events = JSON.parse(tb.text.trim().replace(/```json|```/g, '').trim());
+    const events = extractJSON(tb.text);
     console.log('  [Try 3] Found ' + events.length + ' events');
     return events;
   } catch (err) {
@@ -249,32 +266,43 @@ async function scrapeWithVision() {
     console.log('\n' + placeName + ' - ' + url);
     var totalSaved = 0;
 
+    // Try 0: Direct parse
+    // If it returns events (even all duplicates), the site is working — skip further tries
     var directEvents = await tryDirectParse(browser, url, placeName);
-    if (directEvents.length > 0) totalSaved = await saveEvents(source.place_id, directEvents, url);
+    if (directEvents.length > 0) {
+      totalSaved = await saveEvents(source.place_id, directEvents, url);
+      // Site responded with events — don't run further strategies even if all were duplicates
+      console.log('  total saved: ' + totalSaved);
+      continue;
+    }
 
-    if (totalSaved === 0) {
-      var links = await tryLinkExtract(browser, url, source.place_id);
-      if (links.length > 0) {
-        var evts = [];
-        for (var j = 0; j < links.length; j++) {
-          var evt = await scrapeEventPage(browser, links[j]);
-          if (evt) evts.push(evt);
-          await new Promise(r => setTimeout(r, 1000));
-        }
-        totalSaved = await saveEvents(source.place_id, evts, url);
+    // Try 1: Link extraction → individual pages
+    var links = await tryLinkExtract(browser, url, source.place_id);
+    if (links.length > 0) {
+      var evts = [];
+      for (var j = 0; j < links.length; j++) {
+        var evt = await scrapeEventPage(browser, links[j]);
+        if (evt) evts.push(evt);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      totalSaved = await saveEvents(source.place_id, evts, url);
+      if (totalSaved > 0 || links.length > 0) {
+        console.log('  total saved: ' + totalSaved);
+        continue;
       }
     }
 
-    if (totalSaved === 0) {
-      var vEvents = await tryScreenshotVision(browser, url, placeName);
+    // Try 2: Screenshot + Vision
+    var vEvents = await tryScreenshotVision(browser, url, placeName);
+    if (vEvents.length > 0) {
       totalSaved = await saveEvents(source.place_id, vEvents, url);
+      console.log('  total saved: ' + totalSaved);
+      continue;
     }
 
-    if (totalSaved === 0) {
-      var sEvents = await tryWebSearch(placeName);
-      totalSaved = await saveEvents(source.place_id, sEvents, url);
-    }
-
+    // Try 3: Web search (last resort)
+    var sEvents = await tryWebSearch(placeName);
+    totalSaved = await saveEvents(source.place_id, sEvents, url);
     console.log('  total saved: ' + totalSaved);
   }
 

@@ -121,7 +121,7 @@
       font-size: 13px;
       border-radius: 4px;
       outline: none;
-      width: 280px;
+      width: 220px;
       transition: border-color 0.15s;
     }
     .add-form input[type="text"]:focus { border-color: var(--accent); }
@@ -315,7 +315,7 @@
   <button class="btn-add" id="add-toggle" onclick="toggleAdd()">+ add place</button>
   <div class="add-form" id="add-form" style="display:none">
     <input type="text" id="place-name" placeholder="place name..." />
-    <input type="text" id="place-url" placeholder="website URL (e.g. https://matmon.space)" />
+    <input type="text" id="place-url" placeholder="website URL..." />
     <input type="text" id="place-city" placeholder="city (optional)" />
     <button class="btn btn-primary" onclick="addPlace()">add</button>
     <button class="btn btn-secondary" onclick="toggleAdd()">cancel</button>
@@ -346,7 +346,7 @@
     document.getElementById('add-msg').textContent = '';
   }
 
-  ffunction addPlace() {
+  function addPlace() {
     var name = document.getElementById('place-name').value.trim();
     var url = document.getElementById('place-url').value.trim();
     var city = document.getElementById('place-city').value.trim();
@@ -357,16 +357,12 @@
       msg.className = 'add-msg error';
       return;
     }
-
     if (!url) {
       msg.textContent = 'enter a website URL';
       msg.className = 'add-msg error';
       return;
     }
-
-    if (!url.startsWith('http')) {
-      url = 'https://' + url;
-    }
+    if (!url.startsWith('http')) { url = 'https://' + url; }
 
     msg.textContent = 'adding...';
     msg.className = 'add-msg';
@@ -379,7 +375,7 @@
     .then(function(res) { return res.json(); })
     .then(function(data) {
       if (data.success) {
-        msg.textContent = '✓ added — scraping started';
+        msg.textContent = 'added — scraping started';
         msg.className = 'add-msg success';
         document.getElementById('place-name').value = '';
         document.getElementById('place-url').value = '';
@@ -388,12 +384,6 @@
         msg.textContent = 'error: ' + (data.error || 'unknown');
         msg.className = 'add-msg error';
       }
-    })
-    .catch(function() {
-      msg.textContent = 'error — is server.js running?';
-      msg.className = 'add-msg error';
-    });
-  }
     })
     .catch(function() {
       msg.textContent = 'error — is server.js running?';
@@ -453,7 +443,7 @@
       : '<div class="event-image-placeholder"></div>';
 
     var linkHtml = e.source_url
-      ? '<a class="event-link" href="' + e.source_url + '" target="_blank">↗ view event</a>'
+      ? '<a class="event-link" href="' + e.source_url + '" target="_blank">view event</a>'
       : '';
 
     return '<div class="event-card">' +

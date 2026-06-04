@@ -3,6 +3,8 @@ const puppeteer = require('puppeteer');
 const Anthropic = require('@anthropic-ai/sdk');
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
+const https = require('https');
+const http = require('http');
 
 // Usage: node add-place.js "Venue Name" "https://any-url.com" [city]
 const name = process.argv[2];
@@ -50,44 +52,66 @@ async function openPage(browser, url) {
   return page;
 }
 
-// UNIVERSAL image handler: download via Puppeteer (bypasses hotlink protection) and upload to Supabase Storage
-// Falls back to screenshot if no image URL available
-async function getAndStoreImage(page, imageUrl, placeId) {
-  // Try to download the image from within the page context (no hotlink restriction)
+// Download image with Referer spoofing to bypass hotlink protection
+function downloadImageBuffer(imageUrl, referer) {
+  return new Promise(function(resolve) {
+    var parsed = new URL(imageUrl);
+    var lib = parsed.protocol === 'https:' ? https : http;
+    var options = {
+      hostname: parsed.hostname,
+      path: parsed.pathname + parsed.search,
+      headers: {
+        'Referer': referer || parsed.origin,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'image/*'
+      }
+    };
+    var req = lib.get(options, function(res) {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        // Follow redirect
+        downloadImageBuffer(res.headers.location, referer).then(resolve);
+        return;
+      }
+      var chunks = [];
+      res.on('data', function(c) { chunks.push(c); });
+      res.on('end', function() {
+        var buf = Buffer.concat(chunks);
+        resolve(buf.length > 500 ? buf : null);
+      });
+    });
+    req.on('error', function() { resolve(null); });
+    req.setTimeout(10000, function() { req.destroy(); resolve(null); });
+  });
+}
+
+// UNIVERSAL image handler: download with Referer spoofing, upload to Supabase Storage
+// Falls back to Puppeteer screenshot if download fails
+async function getAndStoreImage(page, imageUrl, placeId, pageUrl) {
+  // Try to download with Referer set to the venue's own domain
   if (imageUrl) {
     try {
-      var base64 = await page.evaluate(async function(src) {
-        try {
-          var resp = await fetch(src);
-          if (!resp.ok) return null;
-          var blob = await resp.blob();
-          if (blob.size < 500) return null;
-          return await new Promise(function(res) {
-            var r = new FileReader();
-            r.onloadend = function() { res(r.result ? r.result.split(',')[1] : null); };
-            r.readAsDataURL(blob);
-          });
-        } catch(e) { return null; }
-      }, imageUrl);
-
-      if (base64) {
-        var ext = (imageUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) || ['jpg'])[1] || 'jpg';
+      var referer = pageUrl || (imageUrl ? new URL(imageUrl).origin : 'https://levontin7.com');
+      var buf = await downloadImageBuffer(imageUrl, referer);
+      if (buf) {
+        var ext = ((imageUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) || [])[1] || 'jpg').toLowerCase();
         var fileName = 'events/' + placeId + '_' + Date.now() + '.' + ext;
-        var up = await supabase.storage.from('event-images').upload(fileName, Buffer.from(base64, 'base64'), { contentType: 'image/' + ext, upsert: true });
+        var up = await supabase.storage.from('event-images').upload(fileName, buf, { contentType: 'image/' + ext, upsert: true });
         if (!up.error) return supabase.storage.from('event-images').getPublicUrl(fileName).data.publicUrl;
       }
     } catch(e) {}
   }
 
   // Fallback: screenshot of the current page
-  try {
-    var shot = await page.screenshot({ encoding: 'base64', clip: { x: 0, y: 0, width: 1280, height: 600 } });
-    var fileName2 = 'events/' + placeId + '_screenshot_' + Date.now() + '.png';
-    var up2 = await supabase.storage.from('event-images').upload(fileName2, Buffer.from(shot, 'base64'), { contentType: 'image/png', upsert: true });
-    if (!up2.error) return supabase.storage.from('event-images').getPublicUrl(fileName2).data.publicUrl;
-  } catch(e) {}
+  if (page) {
+    try {
+      var shot = await page.screenshot({ encoding: 'base64', clip: { x: 0, y: 0, width: 1280, height: 600 } });
+      var fileName2 = 'events/' + placeId + '_screenshot_' + Date.now() + '.png';
+      var up2 = await supabase.storage.from('event-images').upload(fileName2, Buffer.from(shot, 'base64'), { contentType: 'image/png', upsert: true });
+      if (!up2.error) return supabase.storage.from('event-images').getPublicUrl(fileName2).data.publicUrl;
+    } catch(e) {}
+  }
 
-  return imageUrl || null; // Last resort: return original URL even if hotlinked
+  return imageUrl || null;
 }
 
 // Find all social profiles for a venue
@@ -162,7 +186,7 @@ async function scrapeWebsite(browser, url, venueName, placeId) {
       // Download all images while still on the page (no hotlink restriction)
       for (var i = 0; i < domEvents.length; i++) {
         var e = domEvents[i];
-        e.image_url = await getAndStoreImage(page, e.raw_image, placeId);
+        e.image_url = await getAndStoreImage(page, e.raw_image, placeId, url);
         process.stdout.write(e.image_url ? '✓' : '·');
       }
       console.log('');
@@ -220,7 +244,7 @@ async function scrapeWebsite(browser, url, venueName, placeId) {
       for (var j = 0; j < events.length; j++) {
         var ev = events[j];
         var imgSrc = ev.image_index >= 0 && imgs[ev.image_index] ? imgs[ev.image_index].src : null;
-        ev.image_url = await getAndStoreImage(page, imgSrc, placeId);
+        ev.image_url = await getAndStoreImage(page, imgSrc, placeId, url);
         process.stdout.write(ev.image_url ? '✓' : '·');
       }
       console.log('');
@@ -260,7 +284,7 @@ async function scrapeWebsite(browser, url, venueName, placeId) {
     for (var k = 0; k < events.length; k++) {
       var ev2 = events[k];
       var imgSrc2 = ev2.image_index >= 0 ? imageUrls[ev2.image_index] : null;
-      ev2.image_url = await getAndStoreImage(page, imgSrc2, placeId);
+      ev2.image_url = await getAndStoreImage(page, imgSrc2, placeId, url);
       ev2.source_url = ev2.event_url || url;
       process.stdout.write(ev2.image_url ? '✓' : '·');
     }

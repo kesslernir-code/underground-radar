@@ -174,10 +174,9 @@ async function scrapeWebsite(url, venueName, placeId) {
         var sdMatch = link.match(/[?&]sd=(\d+)/);
         if (sdMatch) {
           var ts = parseInt(sdMatch[1]) * 1000;
+          // sd= timestamps are already in Israel local time - store directly
           var d = new Date(ts);
-          // Add 3 hours for Israel timezone (UTC+3)
-          d.setHours(d.getHours() + 3);
-          var isoDate = d.toISOString().slice(0, 19);
+          var isoDate = d.toISOString().slice(0, 16).replace('T', 'T').slice(0, 16) + ':00';
           eventData.push({ url: link, date: isoDate });
         }
       });

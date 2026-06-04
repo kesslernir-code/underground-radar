@@ -228,10 +228,13 @@ async function scrapeEventPage(browser, eventUrl) {
   // Take screenshot — Claude will read this like a human
   var screenshot = await page.screenshot({ encoding: 'base64', fullPage: false });
 
-  // Also grab og:image (event poster, publicly accessible)
+  // Also grab og:image and body text for better date extraction
   var ogImage = await page.evaluate(function() {
     var og = document.querySelector('meta[property="og:image"]');
     return og ? og.getAttribute('content') : null;
+  });
+  var bodyText = await page.evaluate(function() {
+    return document.body.innerText.slice(0, 1500);
   });
 
   await page.close();
@@ -256,14 +259,15 @@ async function scrapeEventPage(browser, eventUrl) {
         content: [
           { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot } },
           { type: 'text', text:
-            'This is an event page for a venue in Israel. Extract the event information visible on screen.\n' +
-            'Return ONLY JSON (no explanation):\n' +
+            'This is an event page for a venue in Israel. The current year is 2026.\n\n' +
+            'Page text (for date extraction):\n' + (bodyText || '').slice(0, 800) + '\n\n' +
+            'Extract the event information. Return ONLY JSON:\n' +
             '{\n' +
             '  "title": "event name only (not the venue name)",\n' +
-            '  "event_date": "2026-06-05T20:00:00 — use exact date and time shown on page in Israel local time",\n' +
-            '  "description": "2-3 sentences about this specific event from the page"\n' +
+            '  "event_date": "2026-06-07T21:00:00 — MUST be in 2026, use date AND time from page or text above",\n' +
+            '  "description": "2-3 sentences about this specific event"\n' +
             '}\n' +
-            'If no date/time is visible, use null for event_date.'
+            'IMPORTANT: All events are in 2026. If you see a date like June 7, it is 2026-06-07. Use null ONLY if truly no date found.'
           }
         ]
       }]
@@ -274,6 +278,10 @@ async function scrapeEventPage(browser, eventUrl) {
     if (extracted.event_date && extracted.event_date !== 'null') {
       try {
         var vd = new Date(extracted.event_date + (extracted.event_date.includes('+') || extracted.event_date.endsWith('Z') ? '' : '+03:00'));
+        // If date is in the past (wrong year), correct to 2026
+        if (!isNaN(vd) && vd < new Date('2026-01-01')) {
+          vd.setFullYear(2026);
+        }
         if (!isNaN(vd)) extracted.event_date = vd.toISOString().slice(0, 19);
       } catch(e) {}
     }

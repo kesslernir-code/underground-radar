@@ -58,9 +58,10 @@ async function getAndStoreImage(page, imageUrl, placeId) {
     try {
       var base64 = await page.evaluate(async function(src) {
         try {
-          var resp = await fetch(src, { mode: 'no-cors' });
+          var resp = await fetch(src);
+          if (!resp.ok) return null;
           var blob = await resp.blob();
-          if (blob.size < 1000) return null;
+          if (blob.size < 500) return null;
           return await new Promise(function(res) {
             var r = new FileReader();
             r.onloadend = function() { res(r.result ? r.result.split(',')[1] : null); };

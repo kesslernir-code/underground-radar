@@ -168,7 +168,7 @@ async function scrapeWebsite(url, venueName, placeId) {
       console.log('  [A] HTML: ' + text.length + ' chars, ' + imgUrls.length + ' images, ' + eventLinks.length + ' event links');
 
       var msg = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5', max_tokens: 4096,
+        model: 'claude-sonnet-4-5', max_tokens: 8096,
         messages: [{ role: 'user', content: [{
           type: 'text',
           text: 'Extract ALL upcoming events from this venue page.\nVenue: ' + venueName + '\nURL: ' + url + '\n\n' +
@@ -258,7 +258,7 @@ async function scrapeWebsite(url, venueName, placeId) {
         process.stdout.write(e2.image_url ? '✓' : '·');
       } else {
         e2.image_url = await getAndStoreImage(imgSrc, placeId);
-        process.stdout.write(e2.image_url && !imgSrc || !e2.image_url.includes(new URL(url).hostname) ? '✓' : '·');
+        process.stdout.write(e2.image_url && e2.image_url !== imgSrc ? '✓' : '·');
       }
     }
     console.log('');

@@ -234,9 +234,20 @@ async function tryWebSearch(placeName) {
 
 async function saveEvents(placeId, events, fallbackUrl) {
   var saved = 0;
+  var now = new Date();
+  var twoWeeksFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
   for (var i = 0; i < events.length; i++) {
     var e = events[i];
     if (!e || !e.title) continue;
+
+    // Skip events more than 2 weeks away or already past
+    if (e.event_date) {
+      var eventDate = new Date(e.event_date);
+      if (eventDate > twoWeeksFromNow) { continue; }
+      if (eventDate < now) { continue; }
+    }
+
     var sourceUrl = e.source_url || fallbackUrl;
     var check = await supabase.from('events').select('id').eq('place_id', placeId).eq('title', e.title).limit(1);
     if (check.data && check.data.length > 0) { console.log('  skip: ' + e.title); continue; }

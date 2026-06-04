@@ -342,9 +342,26 @@ async function searchForEvents(venueName, profiles) {
 
 async function saveEvents(placeId, events, fallbackUrl) {
   var saved = 0;
+  var now = new Date();
+  var twoWeeksFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
   for (var i = 0; i < events.length; i++) {
     var e = events[i];
     if (!e || !e.title) continue;
+
+    // Skip events more than 2 weeks away
+    if (e.event_date) {
+      var eventDate = new Date(e.event_date);
+      if (eventDate > twoWeeksFromNow) {
+        console.log('  skip (too far ahead): ' + e.title + ' (' + e.event_date.slice(0, 10) + ')');
+        continue;
+      }
+      if (eventDate < now) {
+        console.log('  skip (past): ' + e.title);
+        continue;
+      }
+    }
+
     var sourceUrl = e.source_url || fallbackUrl;
     // Check by title to avoid false duplicates when multiple events share a listing page URL
     var check = await supabase.from('events').select('id').eq('place_id', placeId).eq('title', e.title).limit(1);

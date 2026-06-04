@@ -149,10 +149,32 @@ async function scrapeWebsite(browser, url, venueName, placeId) {
   var saved = 0;
 
   // STRATEGY 0: Extract events directly from rendered DOM
-  // Works for: JS-rendered timetables, WordPress events, any site that shows events as links
+  // Intercepts image network responses as they load — bypasses all hotlink protection
   try {
-    console.log('  [S0] DOM extraction...');
-    const page = await openPage(browser, url);
+    console.log('  [S0] DOM extraction + image interception...');
+    const page = await browser.newPage();
+    page.setDefaultNavigationTimeout(45000);
+    await page.setViewport({ width: 1280, height: 900 });
+
+    // Intercept all image responses as they load naturally (no hotlink protection applies)
+    var interceptedImages = {};
+    page.on('response', async function(response) {
+      try {
+        var rUrl = response.url();
+        var ct = response.headers()['content-type'] || '';
+        if (ct.includes('image/') && response.status() === 200) {
+          var buf = await response.buffer();
+          if (buf && buf.length > 2000) interceptedImages[rUrl] = buf;
+        }
+      } catch(e) {}
+    });
+
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    } catch(e) { console.log('  (page load: ' + e.message.slice(0, 50) + ')'); }
+    await new Promise(r => setTimeout(r, 5000)); // Wait longer for images to load
+    await page.evaluate(() => window.scrollBy(0, 800));
+    await new Promise(r => setTimeout(r, 2000));
 
     var domEvents = await page.evaluate(function() {
       var results = [];
@@ -182,11 +204,28 @@ async function scrapeWebsite(browser, url, venueName, placeId) {
 
     console.log('  [S0] Found ' + domEvents.length + ' event links in DOM');
 
+    console.log('  [S0] Intercepted ' + Object.keys(interceptedImages).length + ' images from page load');
+
     if (domEvents.length > 0) {
-      // Download all images while still on the page (no hotlink restriction)
+      // Match intercepted images to events and upload to Supabase Storage
       for (var i = 0; i < domEvents.length; i++) {
         var e = domEvents[i];
-        e.image_url = await getAndStoreImage(page, e.raw_image, placeId, url);
+        var imgBuf = e.raw_image ? interceptedImages[e.raw_image] : null;
+        if (imgBuf) {
+          // We have the actual image bytes — upload to Supabase Storage
+          var ext = ((e.raw_image || '').match(/\.(jpg|jpeg|png|webp|gif)/i) || ['jpg'])[1] || 'jpg';
+          var fileName = 'events/' + placeId + '_' + i + '_' + Date.now() + '.' + ext;
+          var up = await supabase.storage.from('event-images').upload(fileName, imgBuf, { contentType: 'image/' + ext, upsert: true });
+          if (!up.error) {
+            e.image_url = supabase.storage.from('event-images').getPublicUrl(fileName).data.publicUrl;
+          }
+        } else if (!e.raw_image) {
+          // No image URL at all - screenshot fallback
+          e.image_url = null;
+        } else {
+          // Image URL exists but wasn't intercepted (didn't load on page)
+          e.image_url = await getAndStoreImage(null, e.raw_image, placeId, url);
+        }
         process.stdout.write(e.image_url ? '✓' : '·');
       }
       console.log('');
@@ -240,11 +279,31 @@ async function scrapeWebsite(browser, url, venueName, placeId) {
     console.log('  [S1] Found ' + events.length + ' events');
 
     if (events.length > 0) {
-      // Map image indices and download
+      // Intercept images as page loads for S1 too
+      var s1Intercepted = {};
+      page.on('response', async function(r1) {
+        try {
+          var r1Url = r1.url();
+          var ct1 = r1.headers()['content-type'] || '';
+          if (ct1.includes('image/') && r1.status() === 200) {
+            var buf1 = await r1.buffer();
+            if (buf1 && buf1.length > 2000) s1Intercepted[r1Url] = buf1;
+          }
+        } catch(e) {}
+      });
+
       for (var j = 0; j < events.length; j++) {
         var ev = events[j];
         var imgSrc = ev.image_index >= 0 && imgs[ev.image_index] ? imgs[ev.image_index].src : null;
-        ev.image_url = await getAndStoreImage(page, imgSrc, placeId, url);
+        var interceptedBuf = imgSrc ? (interceptedImages[imgSrc] || s1Intercepted[imgSrc]) : null;
+        if (interceptedBuf) {
+          var ext2 = ((imgSrc || '').match(/\.(jpg|jpeg|png|webp|gif)/i) || ['jpg'])[1] || 'jpg';
+          var fn2 = 'events/' + placeId + '_s1_' + j + '_' + Date.now() + '.' + ext2;
+          var up2 = await supabase.storage.from('event-images').upload(fn2, interceptedBuf, { contentType: 'image/' + ext2, upsert: true });
+          if (!up2.error) ev.image_url = supabase.storage.from('event-images').getPublicUrl(fn2).data.publicUrl;
+        } else {
+          ev.image_url = await getAndStoreImage(page, imgSrc, placeId, url);
+        }
         process.stdout.write(ev.image_url ? '✓' : '·');
       }
       console.log('');

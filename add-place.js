@@ -87,6 +87,31 @@ async function findAllProfiles(venueName, knownUrl, knownPlatform) {
   return profiles;
 }
 
+// Download image from venue site (bypassing hotlink protection) and upload to Supabase Storage
+async function downloadAndUploadImage(page, imageUrl, placeId) {
+  try {
+    var base64 = await page.evaluate(async function(src) {
+      try {
+        var resp = await fetch(src);
+        if (!resp.ok) return null;
+        var blob = await resp.blob();
+        return await new Promise(function(resolve) {
+          var reader = new FileReader();
+          reader.onloadend = function() { resolve(reader.result.split(',')[1]); };
+          reader.readAsDataURL(blob);
+        });
+      } catch(e) { return null; }
+    }, imageUrl);
+    if (!base64) return null;
+    var buf = Buffer.from(base64, 'base64');
+    var ext = imageUrl.split('.').pop().split('?')[0] || 'jpg';
+    var fileName = 'events/' + placeId + '_' + Date.now() + '.' + ext;
+    var upResult = await supabase.storage.from('event-images').upload(fileName, buf, { contentType: 'image/' + ext, upsert: true });
+    if (upResult.error) return null;
+    return supabase.storage.from('event-images').getPublicUrl(fileName).data.publicUrl;
+  } catch(e) { return null; }
+}
+
 // Step 2: Scrape events from website - Try individual pages first for better data
 async function scrapeWebsite(browser, url, venueName, placeId) {
   console.log('\nScraping website: ' + url);
@@ -200,34 +225,75 @@ async function scrapeWebsite(browser, url, venueName, placeId) {
     }
   } catch (e) { console.log('  [Try 1] Failed: ' + e.message); }
 
-  // Try 0: Direct HTML parse (fallback when no individual pages found)
+  // Try 0: Parse listing page AND download images to Supabase Storage
   try {
-    console.log('  [Try 0] Direct HTML parse (fallback)...');
+    console.log('  [Try 0] Direct HTML parse + image download...');
     const page = await openPage(browser, url);
-    const text = await page.evaluate(() => document.body.innerText.slice(0, 8000));
-    const images = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('img'))
-        .filter(img => img.naturalWidth > 100)
-        .map(img => ({ src: img.src, alt: img.alt }))
-        .filter(i => i.src && i.src.startsWith('http'))
-    );
+
+    // Extract events directly from rendered DOM (links + images + dates)
+    var domEvents = await page.evaluate(function() {
+      var results = [];
+      var links = Array.from(document.querySelectorAll('a[href]'));
+      links.forEach(function(a) {
+        var href = a.href;
+        if (!href || !href.includes('/events/')) return;
+        // Get nearby image
+        var img = a.querySelector('img') || (a.parentElement && a.parentElement.querySelector('img'));
+        var imgSrc = img ? img.src : null;
+        // Get nearby text
+        var text = a.innerText.trim();
+        // Extract time from URL (sd= is Unix timestamp in seconds)
+        var sdMatch = href.match(/[?&]sd=(\d+)/);
+        var eventDate = sdMatch ? new Date(parseInt(sdMatch[1]) * 1000).toISOString().slice(0, 19) : null;
+        if (href && text) {
+          results.push({ source_url: href, title: text, event_date: eventDate, raw_image: imgSrc });
+        }
+      });
+      return results;
+    });
+
+    // Dedupe by source_url
+    var seen = {};
+    domEvents = domEvents.filter(function(e) {
+      if (seen[e.source_url]) return false;
+      seen[e.source_url] = true;
+      return true;
+    });
+
+    console.log('  [Try 0] Found ' + domEvents.length + ' events in DOM');
+
+    // Download and upload images while still on the page (bypasses hotlink protection)
+    for (var i = 0; i < domEvents.length; i++) {
+      var e = domEvents[i];
+      if (e.raw_image) {
+        var hosted = await downloadAndUploadImage(page, e.raw_image, placeId);
+        if (hosted) {
+          e.image_url = hosted;
+          process.stdout.write('.');
+        }
+      }
+    }
+    console.log('');
+
     await page.close();
 
-    const imageList = images.slice(0, 40).map((img, i) => i + ': [alt="' + img.alt + '"] ' + img.src).join('\n') || 'none';
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5', max_tokens: 4096,
-      messages: [{ role: 'user', content: [{
-        type: 'text',
-        text: 'Events listing page for "' + venueName + '".\nURL: ' + url + '\nText:\n' + text + '\nImages:\n' + imageList +
-          '\n\nExtract ALL upcoming events. Return ONLY JSON array:\n' +
-          '[{"title":"...","event_date":"2026-06-15T20:00:00","description":"...","image_url":"...or null","source_url":"event URL or listing URL"}]\n' +
-          'If no events: []'
-      }]}]
-    });
-    const events = extractJSON(msg.content[0].text);
-    console.log('  [Try 0] Found ' + events.length + ' events');
-    if (events.length > 0) {
-      saved = await saveEvents(placeId, events, url);
+    if (domEvents.length > 0) {
+      // Use Claude to clean up titles (DOM text may be truncated)
+      try {
+        var cleanMsg = await anthropic.messages.create({
+          model: 'claude-sonnet-4-5', max_tokens: 2048,
+          messages: [{ role: 'user', content: [{
+            type: 'text',
+            text: 'Clean up these event titles (remove trailing "..." and "\\..." artifacts) and add short descriptions if possible based on the URL/title.\n' +
+              'Input: ' + JSON.stringify(domEvents.map(function(e) { return { title: e.title, url: e.source_url }; })) + '\n' +
+              'Return ONLY JSON array: [{"index":0,"title":"cleaned title","description":"short description or null"}]'
+          }]}]
+        });
+        var cleaned = extractJSON(cleanMsg.content[0].text);
+        cleaned.forEach(function(c) { if (domEvents[c.index]) { domEvents[c.index].title = c.title; domEvents[c.index].description = c.description; }});
+      } catch(e2) {}
+
+      saved = await saveEvents(placeId, domEvents, url);
     }
   } catch (e) { console.log('  [Try 0] Failed: ' + e.message); }
 
@@ -443,7 +509,12 @@ async function enrichEvents(placeId, venueName, profiles) {
   var { data: events } = await supabase.from('events').select('*').eq('place_id', placeId);
   if (!events || events.length === 0) return;
 
-  var incomplete = events.filter(function(e) { return !e.image_url; });
+  // Also treat hotlink-blocked domains as missing images
+  var blockedDomains = ['levontin7.com', 'radical.org.il'];
+  var incomplete = events.filter(function(e) {
+    if (!e.image_url) return true;
+    return blockedDomains.some(function(d) { return e.image_url.includes(d); });
+  });
   if (incomplete.length === 0) { console.log('\nAll events have images — no enrichment needed.'); return; }
 
   console.log('\nEnriching ' + incomplete.length + ' events missing images...');
@@ -529,18 +600,32 @@ async function enrichEvents(placeId, venueName, profiles) {
         });
         var tb = msg2.content.find(function(b) { return b.type === 'text'; });
         if (tb) {
+          var upd = {};
+          // Try JSON first
           try {
             var found = extractJSON(tb.text);
-            var upd = {};
-            if (found.event_url && found.event_url !== 'null' && !found.event_url.includes('levontin7.com')) upd.source_url = found.event_url;
-            if (found.image_url && found.image_url !== 'null' && !found.image_url.includes('levontin7.com')) upd.image_url = found.image_url;
-            if (Object.keys(upd).length > 0) {
-              await supabase.from('events').update(upd).eq('id', ev.id);
-              console.log('  [B] Updated "' + ev.title + '": ' + JSON.stringify(upd).slice(0, 100));
-            } else {
-              console.log('  [B] No external data found for: ' + ev.title);
+            if (found.event_url && !blockedDomains.some(function(d){return found.event_url.includes(d);})) upd.source_url = found.event_url;
+            if (found.image_url && !blockedDomains.some(function(d){return found.image_url.includes(d);})) upd.image_url = found.image_url;
+          } catch(e2) {}
+          // Fallback: extract any image URL from text using regex
+          if (!upd.image_url) {
+            var imgMatches = tb.text.match(/https?:\/\/[^\s"']+\.(?:jpg|jpeg|png|webp|gif)[^\s"']*/gi);
+            if (imgMatches) {
+              var goodImg = imgMatches.find(function(u) { return !blockedDomains.some(function(d){return u.includes(d);}); });
+              if (goodImg) upd.image_url = goodImg;
             }
-          } catch(e2) { console.log('  [B] Parse failed for: ' + ev.title); }
+          }
+          // Fallback: extract any event URL from text
+          if (!upd.source_url) {
+            var urlMatches = tb.text.match(/https?:\/\/(?:www\.facebook\.com\/events\/\d+|[^\s"']+levontin[^\s"']*\/events\/[^\s"']+)/gi);
+            if (urlMatches && urlMatches[0]) upd.source_url = urlMatches[0];
+          }
+          if (Object.keys(upd).length > 0) {
+            await supabase.from('events').update(upd).eq('id', ev.id);
+            console.log('  [B] Updated "' + ev.title + '": ' + JSON.stringify(upd).slice(0, 100));
+          } else {
+            console.log('  [B] No external data for: ' + ev.title);
+          }
         }
       } catch(e) { console.log('  [B] Search failed: ' + e.message.slice(0, 50)); }
       await new Promise(r => setTimeout(r, 1500));

@@ -239,7 +239,8 @@ async function saveEvents(placeId, events, fallbackUrl) {
     var e = events[i];
     if (!e || !e.title) continue;
     var sourceUrl = e.source_url || fallbackUrl;
-    var check = await supabase.from('events').select('id').eq('place_id', placeId).eq('source_url', sourceUrl).limit(1);
+    // Check by title to avoid false duplicates when multiple events share a listing page URL
+    var check = await supabase.from('events').select('id').eq('place_id', placeId).eq('title', e.title).limit(1);
     if (check.data && check.data.length > 0) { console.log('  skip (exists): ' + e.title); continue; }
     var ins = await supabase.from('events').insert([{
       place_id: placeId, title: e.title, event_date: e.event_date,

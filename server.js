@@ -390,3 +390,4 @@ const server = http.createServer(async function(req, res) {
 var PORT = process.env.PORT || 3001;
 server.listen(PORT, function() {
   console.log('Server running on port ' + PORT);
+});

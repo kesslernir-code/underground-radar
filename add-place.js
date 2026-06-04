@@ -307,8 +307,118 @@ async function main() {
     }
   }
 
+  // Quality check: enrich events missing image or individual event URL
+  await enrichEvents(placeId, name, profiles);
+
   console.log('\nDone! Total events saved: ' + totalSaved);
   console.log('Venue now live at: kesslernir-code.github.io/underground-radar');
+}
+
+// Enrich incomplete events: find missing images and individual event page URLs
+async function enrichEvents(placeId, venueName, profiles) {
+  var { data: events } = await supabase.from('events').select('*').eq('place_id', placeId);
+  if (!events || events.length === 0) return;
+
+  var listingDomains = ['levontin7.com', 'mazkeka.com', 'radical.org.il', 'matmon.space'];
+  var incomplete = events.filter(function(e) {
+    var missingImage = !e.image_url;
+    var badUrl = !e.source_url || listingDomains.some(function(d) { return e.source_url && e.source_url.includes(d) && !e.source_url.match(/\/[a-z0-9-]{5,}\/[a-z0-9-]{3,}/i); });
+    return missingImage || badUrl;
+  });
+
+  if (incomplete.length === 0) { console.log('\nAll events complete — no enrichment needed.'); return; }
+
+  console.log('\nEnriching ' + incomplete.length + ' incomplete events...');
+
+  var browser = await require('puppeteer').launch({ headless: true, args: ['--ignore-certificate-errors', '--no-sandbox'] });
+
+  for (var i = 0; i < incomplete.length; i++) {
+    var ev = incomplete[i];
+    console.log('\n  Enriching: ' + ev.title);
+    var foundImage = ev.image_url || null;
+    var foundUrl = ev.source_url || null;
+
+    // Strategy A: search venue website for this specific event
+    if (profiles.website && (!foundImage || !foundUrl || foundUrl === profiles.website)) {
+      try {
+        var pg = await openPage(browser, profiles.website);
+        var links = await pg.evaluate(function() {
+          return Array.from(document.querySelectorAll('a[href]')).map(function(a) { return { href: a.href, text: a.innerText }; });
+        });
+        await pg.close();
+        // Find link whose text matches the event title
+        var match = links.find(function(l) { return l.text && l.href && l.text.includes(ev.title.slice(0, 15)); });
+        if (match && match.href !== profiles.website) {
+          console.log('    [A] Found event page on website: ' + match.href);
+          var ePg = await openPage(browser, match.href);
+          var eData = await ePg.evaluate(function() {
+            return {
+              images: Array.from(document.querySelectorAll('img')).filter(function(img) { return img.naturalWidth > 200; }).map(function(img) { return img.src; }).filter(function(s) { return s && s.startsWith('http'); })
+            };
+          });
+          await ePg.close();
+          if (!foundUrl || foundUrl === profiles.website) foundUrl = match.href;
+          if (!foundImage && eData.images.length > 0) foundImage = eData.images[0];
+        }
+      } catch(e) { console.log('    [A] Failed: ' + e.message.slice(0, 50)); }
+    }
+
+    // Strategy B: Google search for this specific event
+    if (!foundImage || !foundUrl) {
+      try {
+        var msg = await anthropic.messages.create({
+          model: 'claude-sonnet-4-5', max_tokens: 1000,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: [{ role: 'user', content:
+            'Search for the specific event "' + ev.title + '" at "' + venueName + '" in Israel 2026.\n' +
+            'Find:\n1. The direct event page URL (on venue site or Facebook Events)\n2. An image/poster for this event\n\n' +
+            'Return ONLY JSON:\n{"event_url":"direct URL to this specific event or null","image_url":"direct image URL or null"}'
+          }]
+        });
+        var tb = msg.content.find(function(b) { return b.type === 'text'; });
+        if (tb) {
+          var found = extractJSON(tb.text);
+          if (found.event_url && (!foundUrl || foundUrl === profiles.website)) { foundUrl = found.event_url; console.log('    [B] Found event URL: ' + foundUrl); }
+          if (found.image_url && !foundImage) { foundImage = found.image_url; console.log('    [B] Found image: ' + foundImage); }
+        }
+      } catch(e) { console.log('    [B] Failed: ' + e.message.slice(0, 50)); }
+    }
+
+    // Strategy C: Facebook Events search
+    if (profiles.facebook && !foundImage) {
+      try {
+        var msg2 = await anthropic.messages.create({
+          model: 'claude-sonnet-4-5', max_tokens: 800,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: [{ role: 'user', content:
+            'Search Facebook Events for "' + ev.title + '" at ' + profiles.facebook + '.\n' +
+            'Return ONLY JSON: {"event_url":"facebook event URL or null","image_url":"event image URL or null"}'
+          }]
+        });
+        var tb2 = msg2.content.find(function(b) { return b.type === 'text'; });
+        if (tb2) {
+          var found2 = extractJSON(tb2.text);
+          if (found2.event_url && !foundUrl) { foundUrl = found2.event_url; console.log('    [C] Found FB event: ' + foundUrl); }
+          if (found2.image_url && !foundImage) { foundImage = found2.image_url; console.log('    [C] Found FB image: ' + foundImage); }
+        }
+      } catch(e) { console.log('    [C] Failed: ' + e.message.slice(0, 50)); }
+    }
+
+    // Update DB if we found anything new
+    var updates = {};
+    if (foundImage && foundImage !== ev.image_url) updates.image_url = foundImage;
+    if (foundUrl && foundUrl !== ev.source_url) updates.source_url = foundUrl;
+    if (Object.keys(updates).length > 0) {
+      await supabase.from('events').update(updates).eq('id', ev.id);
+      console.log('    Updated: ' + JSON.stringify(updates).slice(0, 80));
+    } else {
+      console.log('    No new data found for this event');
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  await browser.close();
+  console.log('\nEnrichment complete.');
 }
 
 main().catch(console.error);

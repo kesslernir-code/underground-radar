@@ -162,7 +162,7 @@ async function scrapeWebsite(url, venueName, placeId) {
     if (html && html.length > 1000) {
       var text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 9000);
       var imgMatches = html.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|gif)[^"'\s<>]*/gi) || [];
-      var imgUrls = imgMatches.filter(function(u, i, arr) { return arr.indexOf(u) === i; }).slice(0, 80);
+      var imgUrls = imgMatches.filter(function(u, i, arr) { return arr.indexOf(u) === i && !u.includes('logo') && !u.includes('icon') && !u.includes('thumb'); }).slice(0, 30);
       var linkMatches = html.match(/https?:\/\/[^"'\s<>]*\/events\/[^"'\s<>]*/gi) || [];
       var eventLinks = linkMatches.filter(function(u, i, arr) { return arr.indexOf(u) === i; });
       console.log('  [A] HTML: ' + text.length + ' chars, ' + imgUrls.length + ' images, ' + eventLinks.length + ' event links');

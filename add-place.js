@@ -87,14 +87,111 @@ async function findAllProfiles(venueName, knownUrl, knownPlatform) {
   return profiles;
 }
 
-// Step 2: Scrape events from website using 4-strategy approach
+// Step 2: Scrape events from website - Try individual pages first for better data
 async function scrapeWebsite(browser, url, venueName, placeId) {
   console.log('\nScraping website: ' + url);
   var saved = 0;
 
-  // Try 0: Direct HTML parse
+  // Try 1 FIRST: Find individual event page URLs (these have images + correct URLs)
   try {
-    console.log('  [Try 0] Direct HTML parse...');
+    console.log('  [Try 1] Finding individual event pages...');
+    const page = await openPage(browser, url);
+    const links = await page.evaluate(function(base) {
+      var domain = new URL(base).origin;
+      return Array.from(document.querySelectorAll('a[href]'))
+        .map(function(a) {
+          var href = a.href;
+          if (!href) return null;
+          if (href.startsWith('http')) return href;
+          if (href.startsWith('/')) return domain + href;
+          return null;
+        }).filter(Boolean);
+    }, url);
+    await page.close();
+
+    if (links.length > 0) {
+      const msg = await anthropic.messages.create({
+        model: 'claude-sonnet-4-5', max_tokens: 1024,
+        messages: [{ role: 'user', content: [{
+          type: 'text',
+          text: 'From URLs on ' + url + ', find individual event pages. Look for /events/, /show/, or Hebrew-encoded paths like /events/%d7%....\nURLs:\n' + links.slice(0, 200).join('\n') + '\nReturn ONLY JSON array: ["url1","url2"]\nIf none: []'
+        }]}]
+      });
+      const eventLinks = extractJSON(msg.content[0].text);
+      console.log('  [Try 1] Found ' + eventLinks.length + ' individual event pages');
+
+      if (eventLinks.length > 0) {
+        for (var i = 0; i < eventLinks.length; i++) {
+          try {
+            var pg = await openPage(browser, eventLinks[i]);
+            var pd = await pg.evaluate(function() {
+              // Check og:image first — designed for external use, never hotlink-blocked
+              var ogImg = document.querySelector('meta[property="og:image"]');
+              var ogImgUrl = ogImg ? ogImg.getAttribute('content') : null;
+              var text = document.body.innerText.slice(0, 3000);
+              var imgs = Array.from(document.querySelectorAll('img'))
+                .filter(function(img) { return img.naturalWidth > 200 && img.naturalHeight > 100; })
+                .map(function(img) { return img.src; })
+                .filter(function(s) { return s && s.startsWith('http'); });
+              return { text: text, images: ogImgUrl ? [ogImgUrl].concat(imgs) : imgs };
+            });
+            // If still no image, take a screenshot of the page
+            var screenshotBase64 = null;
+            if (pd.images.length === 0) {
+              try {
+                var shot = await pg.screenshot({ encoding: 'base64', clip: { x: 0, y: 0, width: 800, height: 500 } });
+                screenshotBase64 = shot;
+              } catch(se) {}
+            }
+            await pg.close();
+
+            var m2 = await anthropic.messages.create({
+              model: 'claude-sonnet-4-5', max_tokens: 512,
+              messages: [{ role: 'user', content: [{
+                type: 'text',
+                text: 'Extract event details.\nURL: ' + eventLinks[i] + '\nText: ' + pd.text.slice(0, 1500) +
+                  '\nReturn ONLY JSON: {"title":"...","event_date":"2026-06-15T21:00:00","description":"..."}\n' +
+                  'For event_date: extract from URL timestamps if present (sd= is Unix start time), or from text.'
+              }]}]
+            });
+            var data = extractJSON(m2.content[0].text);
+            // Extract time from URL if available (sd= parameter is Unix timestamp)
+            var sdMatch = eventLinks[i].match(/[?&]sd=(\d+)/);
+            if (sdMatch) {
+              var ts = parseInt(sdMatch[1]) * 1000;
+              data.event_date = new Date(ts).toISOString().replace('Z', '').slice(0, 19);
+            }
+            var imageUrl = pd.images.length > 0 ? pd.images[0] : null;
+            // Upload screenshot to Supabase Storage if no image found
+            if (!imageUrl && screenshotBase64) {
+              try {
+                var buf = Buffer.from(screenshotBase64, 'base64');
+                var fileName = 'events/' + placeId + '_' + Date.now() + '.png';
+                var upResult = await supabase.storage.from('event-images').upload(fileName, buf, { contentType: 'image/png', upsert: true });
+                if (!upResult.error) {
+                  var pubUrl = supabase.storage.from('event-images').getPublicUrl(fileName);
+                  imageUrl = pubUrl.data.publicUrl;
+                  console.log('  Screenshot uploaded: ' + imageUrl.slice(0, 60));
+                }
+              } catch(se) { console.log('  Screenshot upload failed: ' + se.message); }
+            }
+            var event = {
+              title: data.title, event_date: data.event_date, description: data.description,
+              image_url: imageUrl,
+              source_url: eventLinks[i]
+            };
+            saved += await saveEvents(placeId, [event], url);
+          } catch(e2) { console.log('  Failed page: ' + eventLinks[i].slice(0, 60)); }
+          await new Promise(r => setTimeout(r, 800));
+        }
+        if (saved > 0) return saved;
+      }
+    }
+  } catch (e) { console.log('  [Try 1] Failed: ' + e.message); }
+
+  // Try 0: Direct HTML parse (fallback when no individual pages found)
+  try {
+    console.log('  [Try 0] Direct HTML parse (fallback)...');
     const page = await openPage(browser, url);
     const text = await page.evaluate(() => document.body.innerText.slice(0, 8000));
     const images = await page.evaluate(() =>
@@ -120,7 +217,6 @@ async function scrapeWebsite(browser, url, venueName, placeId) {
     console.log('  [Try 0] Found ' + events.length + ' events');
     if (events.length > 0) {
       saved = await saveEvents(placeId, events, url);
-      if (saved > 0 || events.length > 0) return saved;
     }
   } catch (e) { console.log('  [Try 0] Failed: ' + e.message); }
 
@@ -384,20 +480,23 @@ async function enrichEvents(placeId, venueName, profiles) {
     } catch(e) { console.log('  [A] Failed: ' + e.message.slice(0, 80)); }
   }
 
-  // Strategy B: For still-missing events, search individually
+  // Strategy B: Search Facebook Events for each missing event (public images, individual URLs)
   var stillMissing = incomplete.filter(function(e) { return !e.image_url; });
   if (stillMissing.length > 0) {
-    console.log('  [B] Web searching for ' + stillMissing.length + ' remaining events...');
+    console.log('  [B] Searching Facebook Events for ' + stillMissing.length + ' events...');
     for (var j = 0; j < stillMissing.length; j++) {
       var ev = stillMissing[j];
       try {
         var msg2 = await anthropic.messages.create({
-          model: 'claude-sonnet-4-5', max_tokens: 800,
+          model: 'claude-sonnet-4-5', max_tokens: 1000,
           tools: [{ type: 'web_search_20250305', name: 'web_search' }],
           messages: [{ role: 'user', content:
-            'Find the event page and poster image for: "' + ev.title + '" at ' + venueName + ' (venue in Tel Aviv/Israel) in 2026.\n' +
-            'Search the venue website, Facebook Events, or any event listing.\n' +
-            'Return ONLY valid JSON on one line: {"event_url":"URL or null","image_url":"direct image URL or null"}'
+            'Search for the Facebook Events page for: "' + ev.title + '" at ' + venueName + ' in Tel Aviv, Israel in 2026.\n' +
+            'Also check if there is a dedicated event page on the venue website or any ticketing site (Eventbrite, Bandsintown, etc.).\n' +
+            'I need:\n' +
+            '1. A direct link to the specific event page (Facebook event, venue page, or ticketing page)\n' +
+            '2. A direct URL to the event poster/image (not hosted on levontin7.com which blocks hotlinking)\n\n' +
+            'Return ONLY this JSON: {"event_url":"direct event page URL or null","image_url":"direct image URL (not from levontin7.com) or null"}'
           }]
         });
         var tb = msg2.content.find(function(b) { return b.type === 'text'; });
@@ -405,18 +504,18 @@ async function enrichEvents(placeId, venueName, profiles) {
           try {
             var found = extractJSON(tb.text);
             var upd = {};
-            if (found.event_url && found.event_url !== 'null') upd.source_url = found.event_url;
-            if (found.image_url && found.image_url !== 'null') upd.image_url = found.image_url;
+            if (found.event_url && found.event_url !== 'null' && !found.event_url.includes('levontin7.com')) upd.source_url = found.event_url;
+            if (found.image_url && found.image_url !== 'null' && !found.image_url.includes('levontin7.com')) upd.image_url = found.image_url;
             if (Object.keys(upd).length > 0) {
               await supabase.from('events').update(upd).eq('id', ev.id);
-              console.log('  [B] Updated "' + ev.title + '": ' + JSON.stringify(upd).slice(0, 80));
+              console.log('  [B] Updated "' + ev.title + '": ' + JSON.stringify(upd).slice(0, 100));
             } else {
-              console.log('  [B] No data found for: ' + ev.title);
+              console.log('  [B] No external data found for: ' + ev.title);
             }
           } catch(e2) { console.log('  [B] Parse failed for: ' + ev.title); }
         }
       } catch(e) { console.log('  [B] Search failed: ' + e.message.slice(0, 50)); }
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 1500));
     }
   }
 

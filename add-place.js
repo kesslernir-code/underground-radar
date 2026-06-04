@@ -143,6 +143,9 @@ async function discoverEventUrls(websiteUrl) {
     var links = html.match(/https?:\/\/[^"'\s<>]*\/events?\/[^"'\s<>]{3,}/gi) || [];
     // Hebrew "אירועים" encoded as %d7%90%d7%99%d7%a8%d7%95%d7%a2%d7%99%d7%9d
     var hebrewLinks = html.match(/https?:\/\/[^"'\s<>]*\/%d7%90%d7%99%d7%a8%d7%95%d7%a2%d7%99%d7%9d\/[^"'\s<>]{3,}/gi) || [];
+    // Also match actual Hebrew characters in URLs
+    var hebrewRaw = html.match(/https?:\/\/[^"'\s<>]*\/\u05d0\u05d9\u05e8\u05d5\u05e2\u05d9\u05dd\/[^"'\s<>]{3,}/gi) || [];
+    hebrewLinks = hebrewLinks.concat(hebrewRaw);
     // Also find links with ?sd= timestamp (event calendar entries)
     var sdLinks = html.match(/https?:\/\/[^"'\s<>]*\?sd=\d+[^"'\s<>]*/gi) || [];
     var allLinks = links.concat(hebrewLinks).concat(sdLinks);

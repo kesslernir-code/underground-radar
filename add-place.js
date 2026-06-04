@@ -227,13 +227,14 @@ async function scrapeWebsite(url, venueName, placeId) {
     await new Promise(r => setTimeout(r, 3000));
 
     var pageText = await page.evaluate(() => document.body.innerText.slice(0, 8000));
-    var pageImgs = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('img')).filter(i => i.naturalWidth > 80).map(i => i.src).filter(s => s && s.startsWith('http'))
-    );
     await browser.close();
 
-    var interceptedCount = Object.keys(intercepted).length;
-    console.log('  [B] Intercepted ' + interceptedCount + ' images natively');
+    // Use intercepted URLs as the image list — these are real downloaded images
+    var pageImgs = Object.keys(intercepted).filter(function(u) {
+      return u.match(/\/uploads\/.*\.(jpg|jpeg|png|webp|gif)/i);
+    });
+    var interceptedCount = pageImgs.length;
+    console.log('  [B] Intercepted ' + interceptedCount + ' real images natively');
 
     var msg2 = await anthropic.messages.create({
       model: 'claude-sonnet-4-5', max_tokens: 4096,
@@ -249,10 +250,11 @@ async function scrapeWebsite(url, venueName, placeId) {
     for (var j = 0; j < events2.length; j++) {
       var e2 = events2[j];
       var imgSrc = e2.image_index >= 0 ? pageImgs[e2.image_index] : null;
-      if (imgSrc && intercepted[imgSrc]) {
+      var imgBuf2 = imgSrc ? intercepted[imgSrc] : null;
+      if (imgBuf2) {
         // Use natively intercepted image — bypasses all hotlink protection
         var ext2 = ((imgSrc.match(/\.(jpg|jpeg|png|webp|gif)/i) || [])[1] || 'jpg').toLowerCase();
-        e2.image_url = await uploadImage(intercepted[imgSrc], placeId, ext2);
+        e2.image_url = await uploadImage(imgBuf2, placeId, ext2);
         process.stdout.write(e2.image_url ? '✓' : '·');
       } else {
         e2.image_url = await getAndStoreImage(imgSrc, placeId);

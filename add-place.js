@@ -236,6 +236,13 @@ async function scrapeEventPage(browser, eventUrl) {
     });
     extracted = extractJSON(msg.content[0].text);
     if (extracted.event_date === 'null') extracted.event_date = null;
+    // Claude Vision returns Israel local time — convert to UTC by subtracting 3h
+    if (extracted.event_date && extracted.event_date !== 'null') {
+      try {
+        var vd = new Date(extracted.event_date + (extracted.event_date.includes('+') || extracted.event_date.endsWith('Z') ? '' : '+03:00'));
+        if (!isNaN(vd)) extracted.event_date = vd.toISOString().slice(0, 19);
+      } catch(e) {}
+    }
   } catch(e) {
     console.log('    Vision extraction failed: ' + e.message.slice(0, 60));
   }

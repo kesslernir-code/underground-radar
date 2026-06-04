@@ -11,7 +11,7 @@ const zlib = require('zlib');
 const name = process.argv[2];
 const inputUrl = process.argv[3];
 const city = process.argv[4] || 'Tel Aviv';
-const MAX_EVENTS = parseInt(process.argv[5] || '3'); // default: 3 for testing
+const MAX_EVENTS = parseInt(process.argv[5] || '1'); // default: 1 for testing
 
 if (!name || !inputUrl) {
   console.log('Usage: node add-place.js "Venue Name" "https://url" [city] [maxEvents]');
@@ -139,11 +139,13 @@ async function discoverEventUrls(websiteUrl) {
   try {
     var html = await fetchHTML(websiteUrl);
     if (!html) return [];
-    // Find all links matching event URL patterns
+    // Find all links matching event URL patterns (English and Hebrew)
     var links = html.match(/https?:\/\/[^"'\s<>]*\/events?\/[^"'\s<>]{3,}/gi) || [];
+    // Hebrew "אירועים" encoded as %d7%90%d7%99%d7%a8%d7%95%d7%a2%d7%99%d7%9d
+    var hebrewLinks = html.match(/https?:\/\/[^"'\s<>]*\/%d7%90%d7%99%d7%a8%d7%95%d7%a2%d7%99%d7%9d\/[^"'\s<>]{3,}/gi) || [];
     // Also find links with ?sd= timestamp (event calendar entries)
     var sdLinks = html.match(/https?:\/\/[^"'\s<>]*\?sd=\d+[^"'\s<>]*/gi) || [];
-    var allLinks = links.concat(sdLinks);
+    var allLinks = links.concat(hebrewLinks).concat(sdLinks);
     // Deduplicate and filter out listing pages
     var seen = {};
     var eventLinks = allLinks.filter(function(url) {
@@ -161,18 +163,19 @@ async function discoverEventUrls(websiteUrl) {
   }
 }
 
-// STEP 3: Visit individual event page and extract all data
+// STEP 3: Screenshot event page → Claude Vision extracts everything
+// Universal: works for any website regardless of structure
 async function scrapeEventPage(browser, eventUrl) {
   var page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 900 });
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120');
 
-  // Intercept image responses as they load (bypasses hotlink protection)
+  // Intercept uploaded images as Chrome loads them (no hotlink protection)
   var interceptedImages = {};
   page.on('response', async function(r) {
     try {
       var ct = r.headers()['content-type'] || '';
-      if (ct.includes('image/') && r.status() === 200 && r.url().includes('/uploads/')) {
+      if (ct.includes('image/') && r.status() === 200 && r.url().match(/\/uploads\//i)) {
         var buf = await r.buffer();
         if (buf && buf.length > 3000) interceptedImages[r.url()] = buf;
       }
@@ -181,63 +184,76 @@ async function scrapeEventPage(browser, eventUrl) {
 
   try {
     await page.goto(eventUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, 4000));
+    await page.evaluate(() => window.scrollBy(0, 300));
+    await new Promise(r => setTimeout(r, 1000));
   } catch(e) {
     console.log('    (page load: ' + e.message.slice(0, 50) + ')');
   }
 
-  // Extract all event data from the page
-  var data = await page.evaluate(function() {
-    // og: meta tags — most reliable source
-    function getMeta(prop) {
-      var el = document.querySelector('meta[property="' + prop + '"], meta[name="' + prop + '"]');
-      return el ? (el.getAttribute('content') || el.getAttribute('value') || '').trim() : '';
-    }
-    var ogImage = getMeta('og:image');
-    var ogTitle = getMeta('og:title');
-    var ogDesc = getMeta('og:description');
-    var pageTitle = document.title || '';
-    var bodyText = document.body.innerText.slice(0, 3000);
+  // Take screenshot — Claude will read this like a human
+  var screenshot = await page.screenshot({ encoding: 'base64', fullPage: false });
 
-    // Images from DOM (for fallback)
-    var domImages = Array.from(document.querySelectorAll('img'))
-      .filter(function(img) { return img.naturalWidth > 200 || img.width > 200; })
-      .map(function(img) { return img.src; })
-      .filter(function(s) { return s && s.startsWith('http'); });
-
-    return { ogImage: ogImage, ogTitle: ogTitle, ogDesc: ogDesc, pageTitle: pageTitle, bodyText: bodyText, domImages: domImages };
+  // Also grab og:image (event poster, publicly accessible)
+  var ogImage = await page.evaluate(function() {
+    var og = document.querySelector('meta[property="og:image"]');
+    return og ? og.getAttribute('content') : null;
   });
 
   await page.close();
 
-  // Extract date from URL's sd= parameter (most reliable for venues using this pattern)
-  var dateStr = null;
+  // Extract date from URL sd= if available (precise for calendar-based venues)
+  var dateFromUrl = null;
   var sdMatch = eventUrl.match(/[?&]sd=(\d+)/);
   if (sdMatch) {
-    // sd= is in Israel local time stored as UTC-like number; subtract 2h to get real UTC
     var ts = parseInt(sdMatch[1]);
-    dateStr = new Date((ts - 7200) * 1000).toISOString().slice(0, 19);
+    // sd= stores Israel time (IDT = UTC+3); subtract 3h to get real UTC
+    dateFromUrl = new Date((ts - 10800) * 1000).toISOString().slice(0, 19);
   }
 
-  // Choose best image: prefer intercepted (no hotlink) > og:image > DOM
-  var imageUrl = null;
-  var interceptedUrls = Object.keys(interceptedImages);
-  if (interceptedUrls.length > 0) {
-    imageUrl = interceptedUrls[0]; // will upload buffer later
-  } else if (data.ogImage) {
-    imageUrl = data.ogImage;
-  } else if (data.domImages.length > 0) {
-    imageUrl = data.domImages[0];
+  // Send screenshot to Claude Vision — extracts everything a human can see
+  var extracted = {};
+  try {
+    var msg = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot } },
+          { type: 'text', text:
+            'This is an event page for a venue in Israel. Extract the event information visible on screen.\n' +
+            'Return ONLY JSON (no explanation):\n' +
+            '{\n' +
+            '  "title": "event name only (not the venue name)",\n' +
+            '  "event_date": "2026-06-05T20:00:00 — use exact date and time shown on page in Israel local time",\n' +
+            '  "description": "2-3 sentences about this specific event from the page"\n' +
+            '}\n' +
+            'If no date/time is visible, use null for event_date.'
+          }
+        ]
+      }]
+    });
+    extracted = extractJSON(msg.content[0].text);
+    if (extracted.event_date === 'null') extracted.event_date = null;
+  } catch(e) {
+    console.log('    Vision extraction failed: ' + e.message.slice(0, 60));
   }
+
+  // Image priority: intercepted bytes > og:image > screenshot as last resort
+  var interceptedUrls = Object.keys(interceptedImages);
+  var rawImageUrl = interceptedUrls.length > 0 ? interceptedUrls[0] : (ogImage || null);
+  var interceptedBuf = rawImageUrl && interceptedImages[rawImageUrl] ? interceptedImages[rawImageUrl] : null;
 
   return {
-    title: data.ogTitle || data.pageTitle || '',
-    description: data.ogDesc || '',
-    event_date: dateStr,
+    title: extracted.title || '',
+    // URL date is more precise (exact timestamp); Vision date used for venues without sd=
+    event_date: dateFromUrl || extracted.event_date || null,
+    description: extracted.description || '',
     source_url: eventUrl,
-    raw_image_url: imageUrl,
-    intercepted_buf: imageUrl && interceptedImages[imageUrl] ? interceptedImages[imageUrl] : null,
-    body_text: data.bodyText
+    raw_image_url: rawImageUrl,
+    intercepted_buf: interceptedBuf,
+    screenshot_base64: !rawImageUrl ? screenshot : null
   };
 }
 
@@ -260,6 +276,18 @@ async function enrichEvent(eventData, venueName) {
     if (result.title) eventData.title = result.title;
     if (result.description) eventData.description = result.description;
   } catch(e) {}
+
+  // If date still missing, ask Claude to extract it from page text
+  if (!eventData.event_date && eventData.body_text) {
+    try {
+      var dateMsg = await anthropic.messages.create({
+        model: 'claude-sonnet-4-5', max_tokens: 200,
+        messages: [{ role: 'user', content: 'Extract the event date and time from this text. Return ONLY JSON: {"event_date":"2026-06-15T20:00:00 or null"}\n\n' + eventData.body_text.slice(0, 1500) }]
+      });
+      var dr = extractJSON(dateMsg.content[0].text);
+      if (dr.event_date && dr.event_date !== 'null') eventData.event_date = dr.event_date;
+    } catch(e) {}
+  }
 
   // If image still missing, search for it
   if (!eventData.raw_image_url) {
@@ -298,6 +326,10 @@ async function saveEvent(placeId, eventData) {
       imageUrl = await uploadImage(buf, placeId, ext2);
     }
     if (!imageUrl) imageUrl = eventData.raw_image_url; // last resort: keep original
+  }
+  // Final fallback: upload the page screenshot itself
+  if (!imageUrl && eventData.screenshot_base64) {
+    imageUrl = await uploadImage(Buffer.from(eventData.screenshot_base64, 'base64'), placeId, 'png');
   }
 
   var ins = await supabase.from('events').insert([{

@@ -156,10 +156,41 @@ async function discoverEventUrls(websiteUrl) {
       if (seen[clean]) return false;
       seen[clean] = true;
       // Must be a specific event page (not just /events/ or /events listing)
-      return url.includes('?sd=') || clean.match(/\/events?\/[a-z0-9%\-_]{3,}\/?$/i);
+      // Accept: ?sd= calendar links, /events/ paths, Hebrew /אירועים/ paths
+      return url.includes('?sd=') || clean.match(/\/events?\/[a-z0-9%\-_]{3,}\/?$/i) || clean.includes('/\u05d0\u05d9\u05e8\u05d5\u05e2\u05d9\u05dd/');
     });
-    console.log('  Found ' + eventLinks.length + ' individual event URLs');
-    return eventLinks;
+    if (eventLinks.length > 0) {
+      console.log('  Found ' + eventLinks.length + ' individual event URLs');
+      return eventLinks;
+    }
+
+    // Fallback: use Puppeteer to load page (handles JS-rendered content)
+    console.log('  HTML fetch found 0 — trying Puppeteer...');
+    var browser2 = await require('puppeteer').launch({ headless: true, args: ['--no-sandbox'] });
+    var pg = await browser2.newPage();
+    await pg.setUserAgent('Mozilla/5.0');
+    try {
+      await pg.goto(websiteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await new Promise(r => setTimeout(r, 4000));
+      var puppLinks = await pg.evaluate(function() {
+        return Array.from(document.querySelectorAll('a[href]'))
+          .map(function(a) { return a.href; })
+          .filter(function(h) { return h && h.startsWith('http'); });
+      });
+      await pg.close();
+      await browser2.close();
+      var seen2 = {};
+      return puppLinks.filter(function(url) {
+        var clean = url.split('?')[0];
+        if (seen2[clean]) return false;
+        seen2[clean] = true;
+        return url.includes('?sd=') || clean.match(/\/events?\/[a-z0-9%\-_]{3,}\/?$/i) || clean.includes('/\u05d0\u05d9\u05e8\u05d5\u05e2\u05d9\u05dd/');
+      });
+    } catch(pe) {
+      await browser2.close();
+      console.log('  Puppeteer fallback failed: ' + pe.message.slice(0, 60));
+      return [];
+    }
   } catch(e) {
     console.log('  Discovery failed: ' + e.message);
     return [];

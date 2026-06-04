@@ -7,12 +7,14 @@ const https = require('https');
 const http = require('http');
 const zlib = require('zlib');
 
+// Usage: node add-place.js "Venue Name" "https://url" [city] [maxEvents]
 const name = process.argv[2];
 const inputUrl = process.argv[3];
 const city = process.argv[4] || 'Tel Aviv';
+const MAX_EVENTS = parseInt(process.argv[5] || '3'); // default: 3 for testing
 
 if (!name || !inputUrl) {
-  console.log('Usage: node add-place.js "Venue Name" "https://url" [city]');
+  console.log('Usage: node add-place.js "Venue Name" "https://url" [city] [maxEvents]');
   process.exit(1);
 }
 
@@ -35,27 +37,23 @@ function extractJSON(text) {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-// Fetch page HTML via Node.js (avoids headless browser detection by Cloudflare etc.)
+// Fetch HTML via Node.js (no headless browser detection)
 function fetchHTML(pageUrl) {
   return new Promise(function(resolve) {
     try {
       var parsed = new URL(pageUrl);
       var lib = parsed.protocol === 'https:' ? https : http;
-      var options = {
+      var req = lib.get({
         hostname: parsed.hostname,
         path: parsed.pathname + parsed.search,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Connection': 'keep-alive'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120',
+          'Accept': 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br'
         }
-      };
-      var req = lib.get(options, function(res) {
+      }, function(res) {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          fetchHTML(new URL(res.headers.location, pageUrl).href).then(resolve);
-          return;
+          fetchHTML(new URL(res.headers.location, pageUrl).href).then(resolve); return;
         }
         var chunks = [];
         res.on('data', function(c) { chunks.push(c); });
@@ -75,22 +73,17 @@ function fetchHTML(pageUrl) {
   });
 }
 
-// Download image with NO Referer — simulates direct navigation, bypasses hotlink protection
+// Download image with no Referer (bypasses hotlink protection)
 function downloadImage(imageUrl) {
   return new Promise(function(resolve) {
     try {
       var parsed = new URL(imageUrl);
       var lib = parsed.protocol === 'https:' ? https : http;
-      var options = {
+      var req = lib.get({
         hostname: parsed.hostname,
         path: parsed.pathname + parsed.search,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120',
-          'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
-          // NO Referer = direct navigation = bypasses hotlink protection
-        }
-      };
-      var req = lib.get(options, function(res) {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/*' }
+      }, function(res) {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           downloadImage(res.headers.location).then(resolve); return;
         }
@@ -99,11 +92,9 @@ function downloadImage(imageUrl) {
         res.on('data', function(c) { chunks.push(c); });
         res.on('end', function() {
           var buf = Buffer.concat(chunks);
-          // Verify it's a real image by checking magic bytes
           var magic = buf.slice(0, 4).toString('hex');
-          var isReal = magic.startsWith('ffd8') || magic.startsWith('8950') ||
-                       magic.startsWith('4749') || magic.startsWith('5249') || magic.startsWith('424d');
-          resolve(isReal && buf.length > 1000 ? buf : null);
+          var isReal = magic.startsWith('ffd8') || magic.startsWith('8950') || magic.startsWith('4749') || magic.startsWith('5249');
+          resolve(isReal && buf.length > 2000 ? buf : null);
         });
       });
       req.on('error', function() { resolve(null); });
@@ -117,286 +108,297 @@ async function uploadImage(buf, placeId, ext) {
     var fileName = 'events/' + placeId + '_' + Date.now() + '.' + (ext || 'jpg');
     var up = await supabase.storage.from('event-images').upload(fileName, buf, { contentType: 'image/' + (ext || 'jpeg'), upsert: true });
     if (!up.error) return supabase.storage.from('event-images').getPublicUrl(fileName).data.publicUrl;
-    else console.log('  Upload error: ' + up.error.message + ' | file: ' + fileName);
-  } catch(e) { console.log('  Upload exception: ' + e.message); }
+  } catch(e) {}
   return null;
 }
 
-async function getAndStoreImage(imageUrl, placeId) {
-  if (!imageUrl) return null;
-  var buf = await downloadImage(imageUrl);
-  if (!buf) return imageUrl; // last resort: keep original URL
-  var ext = ((imageUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) || [])[1] || 'jpg').toLowerCase();
-  return await uploadImage(buf, placeId, ext) || imageUrl;
-}
-
-async function findAllProfiles(venueName, knownUrl, platform) {
-  console.log('\nSearching profiles for: ' + venueName);
+// STEP 1: Find all social profiles for a venue
+async function findProfiles(venueName, knownUrl, platform) {
+  console.log('\nFinding profiles for: ' + venueName);
   var profiles = { website: null, instagram: null, facebook: null, telegram: null };
   profiles[platform] = knownUrl;
   try {
     var msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5', max_tokens: 1024,
+      model: 'claude-sonnet-4-5', max_tokens: 512,
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-      messages: [{ role: 'user', content: 'Find website, Instagram, Facebook, Telegram for Israeli venue "' + venueName + '"' +
-        (platform !== 'website' ? ' (' + platform + ': ' + knownUrl + ')' : ' (website: ' + knownUrl + ')') +
-        '. Return ONLY JSON: {"website":"url or null","instagram":"url or null","facebook":"url or null","telegram":"url or null"}' }]
+      messages: [{ role: 'user', content: 'Find website, Instagram, Facebook, Telegram for Israeli venue "' + venueName + '". Return ONLY JSON: {"website":"url or null","instagram":"url or null","facebook":"url or null","telegram":"url or null"}' }]
     });
     var tb = msg.content.find(b => b.type === 'text');
     if (tb) {
       var found = extractJSON(tb.text);
-      Object.keys(found).forEach(k => { if (found[k] && !profiles[k]) { profiles[k] = found[k]; console.log('  Found ' + k + ': ' + found[k]); } });
+      Object.keys(found).forEach(function(k) { if (found[k] && !profiles[k]) { profiles[k] = found[k]; console.log('  ' + k + ': ' + found[k]); } });
     }
-  } catch(e) { console.log('  Profile search: ' + e.message.slice(0, 60)); }
+  } catch(e) { console.log('  Profile search failed'); }
   profiles[platform] = knownUrl;
   return profiles;
 }
 
-async function scrapeWebsite(url, venueName, placeId) {
-  console.log('\nScraping: ' + url);
-
-  // STRATEGY A: Node.js HTML fetch — avoids Cloudflare/bot detection
-  // Works for: any server-rendered site, WordPress, static HTML
+// STEP 2: Discover individual event page URLs from the venue's listing page
+async function discoverEventUrls(websiteUrl) {
+  console.log('\nDiscovering event URLs from: ' + websiteUrl);
   try {
-    console.log('  [A] Fetching HTML directly...');
-    var html = await fetchHTML(url);
-    if (html && html.length > 1000) {
-      var text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 9000);
-      var imgMatches = html.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|gif)[^"'\s<>]*/gi) || [];
-      var imgUrls = imgMatches.filter(function(u, i, arr) { return arr.indexOf(u) === i && !u.includes('logo') && !u.includes('icon') && !u.includes('thumb'); }).slice(0, 30);
-      var linkMatches = html.match(/https?:\/\/[^"'\s<>]*\/events\/[^"'\s<>]*/gi) || [];
-      var eventLinks = linkMatches.filter(function(u, i, arr) { return arr.indexOf(u) === i; });
-      console.log('  [A] HTML: ' + text.length + ' chars, ' + imgUrls.length + ' images, ' + eventLinks.length + ' event links');
-
-      // Extract event-date pairs directly from URLs (sd= is exact Unix timestamp)
-      var eventData = [];
-      eventLinks.forEach(function(link) {
-        var sdMatch = link.match(/[?&]sd=(\d+)/);
-        if (sdMatch) {
-          var ts = parseInt(sdMatch[1]) * 1000;
-          // sd= stores Israel time as UTC-like number; subtract 2h (Israel = UTC+2) to get real UTC
-          var isoDate = new Date((ts - 7200) * 1000).toISOString().slice(0, 19);
-          eventData.push({ url: link, date: isoDate });
-        }
-      });
-      console.log('  [A] Extracted ' + eventData.length + ' events with exact timestamps from URLs');
-
-      var msg = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5', max_tokens: 8096,
-        messages: [{ role: 'user', content: [{
-          type: 'text',
-          text: 'Extract ALL upcoming events from this venue page.\nVenue: ' + venueName + '\nURL: ' + url + '\n\n' +
-            'Page text:\n' + text + '\n\n' +
-            'Event URLs with EXACT dates (use these dates, do not guess from text):\n' + 
-            eventData.slice(0, 30).map(function(e) { return e.date + ' → ' + e.url; }).join('\n') + '\n\n' +
-            'Images found (by index):\n' + imgUrls.map((u, i) => i + ': ' + u).join('\n') + '\n\n' +
-            'Return ONLY JSON array:\n' +
-            '[{"title":"event title","event_date":"2026-06-15T21:00:00","description":"2-3 sentences","image_index":0,"source_url":"individual event URL"}]\n' +
-            'IMPORTANT: Use the exact event_date from the URL list above, not dates from the page text.\n' +
-            'image_index: pick the index of the event poster image (-1 if none).\n' +
-            'If no events: []'
-        }]}]
-      });
-      var events = extractJSON(msg.content[0].text);
-      console.log('  [A] Claude found ' + events.length + ' events');
-
-      // Inject exact dates from URL timestamps (override Claude's guessed dates)
-      events.forEach(function(e) {
-        var matchData = eventData.find(function(ed) { return ed.url === e.source_url; });
-        if (matchData) {
-          e.event_date = matchData.date;
-        } else if (!e.event_date && e.source_url) {
-          // Try to find date from URL even if source_url doesn't exactly match
-          var sdMatch = (e.source_url || '').match(/[?&]sd=(\d+)/);
-          if (sdMatch) {
-            e.event_date = new Date((parseInt(sdMatch[1]) - 7200) * 1000).toISOString().slice(0, 19);
-          }
-        }
-      });
-
-      if (events.length > 0) {
-        for (var i = 0; i < events.length; i++) {
-          var e = events[i];
-          var imgUrl = e.image_index >= 0 && imgUrls[e.image_index] ? imgUrls[e.image_index] : null;
-          e.image_url = await getAndStoreImage(imgUrl, placeId);
-          process.stdout.write(e.image_url && !e.image_url.includes(new URL(url).hostname) ? '✓' : '·');
-        }
-        console.log('');
-        var saved = await saveEvents(placeId, events, url);
-        // Don't return — let Strategy B run to enrich images
-      }
-    }
-  } catch(e) { console.log('  [A] Failed: ' + e.message.slice(0, 80)); }
-
-  // STRATEGY B: Puppeteer with response interception
-  // Runs ALWAYS to enrich images even if A saved events
-  // Works for: heavily JS-rendered sites where Node.js fetch returns minimal content
-  // Key: intercept images as Chrome loads them natively — no hotlink protection possible
-  try {
-    console.log('  [B] Puppeteer + image interception...');
-    var browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--ignore-certificate-errors'] });
-    var page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 900 });
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120');
-
-    // Intercept ALL image responses as Chrome downloads them naturally
-    var intercepted = {};
-    page.on('response', async function(r) {
-      try {
-        var ct = r.headers()['content-type'] || '';
-        if (ct.includes('image/') && r.status() === 200) {
-          var buf = await r.buffer();
-          if (buf && buf.length > 2000) intercepted[r.url()] = buf;
-        }
-      } catch(e2) {}
+    var html = await fetchHTML(websiteUrl);
+    if (!html) return [];
+    // Find all links matching event URL patterns
+    var links = html.match(/https?:\/\/[^"'\s<>]*\/events?\/[^"'\s<>]{3,}/gi) || [];
+    // Also find links with ?sd= timestamp (event calendar entries)
+    var sdLinks = html.match(/https?:\/\/[^"'\s<>]*\?sd=\d+[^"'\s<>]*/gi) || [];
+    var allLinks = links.concat(sdLinks);
+    // Deduplicate and filter out listing pages
+    var seen = {};
+    var eventLinks = allLinks.filter(function(url) {
+      var clean = url.split('?')[0];
+      if (seen[clean]) return false;
+      seen[clean] = true;
+      // Must be a specific event page (not just /events/ or /events listing)
+      return url.includes('?sd=') || clean.match(/\/events?\/[a-z0-9%\-_]{3,}\/?$/i);
     });
-
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
-    await new Promise(r => setTimeout(r, 6000));
-    await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-    await new Promise(r => setTimeout(r, 3000));
-
-    var pageText = await page.evaluate(() => document.body.innerText.slice(0, 8000));
-    await browser.close();
-
-    // Use intercepted URLs as the image list — these are real downloaded images
-    var pageImgs = Object.keys(intercepted).filter(function(u) {
-      return u.match(/\/uploads\/.*\.(jpg|jpeg|png|webp|gif)/i);
-    });
-    var interceptedCount = pageImgs.length;
-    console.log('  [B] Intercepted ' + interceptedCount + ' real images natively (first: ' + (pageImgs[0] || 'none') + ')');
-
-    var msg2 = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5', max_tokens: 4096,
-      messages: [{ role: 'user', content: [{
-        type: 'text',
-        text: 'Extract ALL upcoming events.\nVenue: ' + venueName + '\nPage text:\n' + pageText + '\nImages:\n' + pageImgs.map((u,i) => i+': '+u).join('\n') +
-          '\nReturn ONLY JSON:\n[{"title":"...","event_date":"2026-06-15T21:00:00","description":"...","image_index":0,"source_url":"event URL or venue URL"}]\nIf none: []'
-      }]}]
-    });
-    var events2 = extractJSON(msg2.content[0].text);
-    console.log('  [B] Claude found ' + events2.length + ' events');
-
-    for (var j = 0; j < events2.length; j++) {
-      var e2 = events2[j];
-      var imgSrc = e2.image_index >= 0 ? pageImgs[e2.image_index] : null;
-      var imgBuf2 = imgSrc ? intercepted[imgSrc] : null;
-      if (imgBuf2) {
-        // Use natively intercepted image — bypasses all hotlink protection
-        var ext2 = ((imgSrc.match(/\.(jpg|jpeg|png|webp|gif)/i) || [])[1] || 'jpg').toLowerCase();
-        e2.image_url = await uploadImage(imgBuf2, placeId, ext2);
-        process.stdout.write(e2.image_url ? '✓' : '·');
-      } else {
-        e2.image_url = await getAndStoreImage(imgSrc, placeId);
-        process.stdout.write(e2.image_url && e2.image_url !== imgSrc ? '✓' : '·');
-      }
-    }
-    console.log('');
-    // Enrich existing events that have no image
-    var { data: existingNoImg } = await supabase.from('events').select('id,title').eq('place_id', placeId).is('image_url', null);
-    if (existingNoImg && existingNoImg.length > 0) {
-      console.log('  [B] Enriching ' + existingNoImg.length + ' events without images...');
-      for (var k = 0; k < Math.min(existingNoImg.length, pageImgs.length); k++) {
-        var ev = existingNoImg[k];
-        // Find best matching image by index (each event gets one intercepted image)
-        var imgKey = pageImgs[k % pageImgs.length];
-        var buf3 = intercepted[imgKey];
-        if (buf3) {
-          var ext3 = ((imgKey.match(/\.(jpg|jpeg|png|webp|gif)/i) || [])[1] || 'jpg').toLowerCase();
-          var uploadedUrl = await uploadImage(buf3, placeId, ext3);
-          if (uploadedUrl) {
-            await supabase.from('events').update({ image_url: uploadedUrl }).eq('id', ev.id);
-            process.stdout.write('✓');
-          } else process.stdout.write('·');
-        }
-        await new Promise(r => setTimeout(r, 100));
-      }
-      console.log('');
-    }
-    // Strategy B only enriches images — A already saved events, don't add duplicates
-    var bSaved = 0;
-    return bSaved;
-  } catch(e) { console.log('  [B] Failed: ' + e.message.slice(0, 80)); }
-
-  return 0;
+    console.log('  Found ' + eventLinks.length + ' individual event URLs');
+    return eventLinks;
+  } catch(e) {
+    console.log('  Discovery failed: ' + e.message);
+    return [];
+  }
 }
 
-async function searchForEvents(venueName) {
-  console.log('\n  Web search for: ' + venueName);
+// STEP 3: Visit individual event page and extract all data
+async function scrapeEventPage(browser, eventUrl) {
+  var page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 900 });
+  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120');
+
+  // Intercept image responses as they load (bypasses hotlink protection)
+  var interceptedImages = {};
+  page.on('response', async function(r) {
+    try {
+      var ct = r.headers()['content-type'] || '';
+      if (ct.includes('image/') && r.status() === 200 && r.url().includes('/uploads/')) {
+        var buf = await r.buffer();
+        if (buf && buf.length > 3000) interceptedImages[r.url()] = buf;
+      }
+    } catch(e) {}
+  });
+
+  try {
+    await page.goto(eventUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
+    await new Promise(r => setTimeout(r, 3000));
+  } catch(e) {
+    console.log('    (page load: ' + e.message.slice(0, 50) + ')');
+  }
+
+  // Extract all event data from the page
+  var data = await page.evaluate(function() {
+    // og: meta tags — most reliable source
+    function getMeta(prop) {
+      var el = document.querySelector('meta[property="' + prop + '"], meta[name="' + prop + '"]');
+      return el ? (el.getAttribute('content') || el.getAttribute('value') || '').trim() : '';
+    }
+    var ogImage = getMeta('og:image');
+    var ogTitle = getMeta('og:title');
+    var ogDesc = getMeta('og:description');
+    var pageTitle = document.title || '';
+    var bodyText = document.body.innerText.slice(0, 3000);
+
+    // Images from DOM (for fallback)
+    var domImages = Array.from(document.querySelectorAll('img'))
+      .filter(function(img) { return img.naturalWidth > 200 || img.width > 200; })
+      .map(function(img) { return img.src; })
+      .filter(function(s) { return s && s.startsWith('http'); });
+
+    return { ogImage: ogImage, ogTitle: ogTitle, ogDesc: ogDesc, pageTitle: pageTitle, bodyText: bodyText, domImages: domImages };
+  });
+
+  await page.close();
+
+  // Extract date from URL's sd= parameter (most reliable for venues using this pattern)
+  var dateStr = null;
+  var sdMatch = eventUrl.match(/[?&]sd=(\d+)/);
+  if (sdMatch) {
+    // sd= is in Israel local time stored as UTC-like number; subtract 2h to get real UTC
+    var ts = parseInt(sdMatch[1]);
+    dateStr = new Date((ts - 7200) * 1000).toISOString().slice(0, 19);
+  }
+
+  // Choose best image: prefer intercepted (no hotlink) > og:image > DOM
+  var imageUrl = null;
+  var interceptedUrls = Object.keys(interceptedImages);
+  if (interceptedUrls.length > 0) {
+    imageUrl = interceptedUrls[0]; // will upload buffer later
+  } else if (data.ogImage) {
+    imageUrl = data.ogImage;
+  } else if (data.domImages.length > 0) {
+    imageUrl = data.domImages[0];
+  }
+
+  return {
+    title: data.ogTitle || data.pageTitle || '',
+    description: data.ogDesc || '',
+    event_date: dateStr,
+    source_url: eventUrl,
+    raw_image_url: imageUrl,
+    intercepted_buf: imageUrl && interceptedImages[imageUrl] ? interceptedImages[imageUrl] : null,
+    body_text: data.bodyText
+  };
+}
+
+// STEP 4: Enrich event — use Claude to clean title/description and find missing data
+async function enrichEvent(eventData, venueName) {
+  // Use Claude to clean up title + description from page text
   try {
     var msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5', max_tokens: 2000,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-      messages: [{ role: 'user', content: 'Find upcoming events at "' + venueName + '" in Tel Aviv Israel in 2026. Return ONLY JSON:\n[{"title":"...","event_date":"2026-06-15T21:00:00","description":"...","source_url":"...","image_url":null}]\nIf none: []' }]
+      model: 'claude-sonnet-4-5', max_tokens: 512,
+      messages: [{ role: 'user', content: [{
+        type: 'text',
+        text: 'This is an event page for "' + venueName + '".\n' +
+          'Current title: "' + eventData.title + '"\n' +
+          'Page text:\n' + eventData.body_text.slice(0, 2000) + '\n\n' +
+          'Return ONLY JSON:\n' +
+          '{"title":"clean event title (Hebrew or English, without venue name)","description":"2-3 sentence description of the event"}'
+      }]}]
     });
-    var tb = msg.content.find(b => b.type === 'text');
-    return tb ? extractJSON(tb.text) : [];
-  } catch(e) { return []; }
+    var result = extractJSON(msg.content[0].text);
+    if (result.title) eventData.title = result.title;
+    if (result.description) eventData.description = result.description;
+  } catch(e) {}
+
+  // If image still missing, search for it
+  if (!eventData.raw_image_url) {
+    console.log('    Searching for image...');
+    try {
+      var searchMsg = await anthropic.messages.create({
+        model: 'claude-sonnet-4-5', max_tokens: 512,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: 'Find an image/poster for the event "' + eventData.title + '" at ' + venueName + '. Return ONLY JSON: {"image_url":"direct image URL or null"}' }]
+      });
+      var tb = searchMsg.content.find(b => b.type === 'text');
+      if (tb) {
+        var found = extractJSON(tb.text);
+        if (found.image_url) eventData.raw_image_url = found.image_url;
+      }
+    } catch(e) {}
+  }
+
+  return eventData;
 }
 
-async function saveEvents(placeId, events, fallbackUrl) {
-  var saved = 0;
-  var now = new Date();
-  var twoWeeks = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-  for (var i = 0; i < events.length; i++) {
-    var e = events[i];
-    if (!e || !e.title || e.title.length < 2) continue;
-    if (e.event_date) {
-      var d = new Date(e.event_date);
-      if (d < now || d > twoWeeks) continue;
+// STEP 5: Upload image and save event
+async function saveEvent(placeId, eventData) {
+  if (!eventData.title || eventData.title.length < 2) return false;
+
+  // Upload image to Supabase Storage
+  var imageUrl = null;
+  if (eventData.intercepted_buf) {
+    var ext = ((eventData.raw_image_url || '').match(/\.(jpg|jpeg|png|webp|gif)/i) || ['jpg'])[1] || 'jpg';
+    imageUrl = await uploadImage(eventData.intercepted_buf, placeId, ext.toLowerCase());
+  }
+  if (!imageUrl && eventData.raw_image_url) {
+    var buf = await downloadImage(eventData.raw_image_url);
+    if (buf) {
+      var ext2 = ((eventData.raw_image_url.match(/\.(jpg|jpeg|png|webp|gif)/i) || ['jpg'])[1] || 'jpg').toLowerCase();
+      imageUrl = await uploadImage(buf, placeId, ext2);
     }
-    var check = await supabase.from('events').select('id').eq('place_id', placeId).ilike('title', e.title).limit(1);
-    if (check.data && check.data.length > 0) { console.log('  skip: ' + e.title); continue; }
-    var ins = await supabase.from('events').insert([{
-      place_id: placeId, title: e.title, event_date: e.event_date,
-      description: e.description, source_url: e.source_url || fallbackUrl,
-      image_url: e.image_url || null, raw_text: 'add-place-cli'
-    }]);
-    if (!ins.error) { console.log('  saved: ' + e.title); saved++; }
-    else console.log('  error: ' + ins.error.message);
-    await new Promise(r => setTimeout(r, 300));
+    if (!imageUrl) imageUrl = eventData.raw_image_url; // last resort: keep original
   }
-  return saved;
+
+  var ins = await supabase.from('events').insert([{
+    place_id: placeId,
+    title: eventData.title,
+    event_date: eventData.event_date || null,
+    description: eventData.description || null,
+    source_url: eventData.source_url,
+    image_url: imageUrl || null,
+    raw_text: 'add-place-v2'
+  }]);
+
+  if (!ins.error) {
+    console.log('  ✓ Saved: ' + eventData.title + (imageUrl ? ' [with image]' : ' [no image]') + (eventData.event_date ? ' [' + eventData.event_date.slice(0, 10) + ']' : ' [no date]'));
+    return true;
+  } else {
+    console.log('  ✗ Error: ' + ins.error.message);
+    return false;
+  }
 }
 
+// MAIN
 async function main() {
-  console.log('\nAdding: ' + name + ' | ' + inputUrl + ' | ' + city);
-  var platform = detectPlatform(inputUrl);
-  console.log('Platform: ' + platform);
+  console.log('\n═══════════════════════════════════');
+  console.log('Adding: ' + name);
+  console.log('URL: ' + inputUrl);
+  console.log('Max events: ' + MAX_EVENTS);
+  console.log('═══════════════════════════════════');
 
-  var existing = await supabase.from('places').select('id').eq('name', name).limit(1);
-  var placeId;
-  if (existing.data && existing.data.length > 0) {
-    placeId = existing.data[0].id;
-    console.log('Place exists (id: ' + placeId + ')');
-  } else {
-    var r = await supabase.from('places').insert([{ name, city, status: 'active', added_by: 'cli' }]).select();
-    if (r.error) { console.log('Failed: ' + r.error.message); process.exit(1); }
-    placeId = r.data[0].id;
-    console.log('Place created (id: ' + placeId + ')');
-  }
+  var platform = detectPlatform(inputUrl);
+
+  // Save place
+  var r = await supabase.from('places').insert([{ name, city, status: 'active', added_by: 'cli' }]).select();
+  if (r.error) { console.log('Failed to save place: ' + r.error.message); process.exit(1); }
+  var placeId = r.data[0].id;
+  console.log('Place created: ' + placeId);
 
   await supabase.from('sources').insert([{ place_id: placeId, type: platform, url_or_handle: inputUrl, active: platform === 'website' }]);
 
-  var profiles = await findAllProfiles(name, inputUrl, platform);
+  // Find profiles
+  var profiles = await findProfiles(name, inputUrl, platform);
   for (var p of ['website', 'instagram', 'facebook', 'telegram']) {
     if (profiles[p] && profiles[p] !== inputUrl) {
       await supabase.from('sources').insert([{ place_id: placeId, type: p, url_or_handle: profiles[p], active: p === 'website' }]);
-      console.log('  Saved ' + p + ': ' + profiles[p]);
     }
   }
 
-  var totalSaved = 0;
-  if (profiles.website) {
-    totalSaved += await scrapeWebsite(profiles.website, name, placeId);
-  }
-  if (totalSaved === 0) {
-    var events = await searchForEvents(name);
-    if (events.length > 0) totalSaved += await saveEvents(placeId, events, inputUrl);
+  var websiteUrl = profiles.website || (platform === 'website' ? inputUrl : null);
+  if (!websiteUrl) {
+    console.log('\nNo website found — cannot discover events without a website URL.');
+    return;
   }
 
-  console.log('\nDone! Saved: ' + totalSaved + ' events');
+  // Discover event URLs
+  var eventUrls = await discoverEventUrls(websiteUrl);
+  if (eventUrls.length === 0) {
+    console.log('No individual event pages found. Try a different starting URL.');
+    return;
+  }
+
+  // Process events one by one
+  var browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--ignore-certificate-errors'] });
+  var saved = 0;
+  var processed = 0;
+
+  console.log('\nProcessing up to ' + MAX_EVENTS + ' events...\n');
+
+  for (var i = 0; i < eventUrls.length && saved < MAX_EVENTS; i++) {
+    var eventUrl = eventUrls[i];
+    processed++;
+    console.log('[' + processed + '] ' + eventUrl.slice(0, 80));
+
+    try {
+      // Step 3: Scrape the individual event page
+      var eventData = await scrapeEventPage(browser, eventUrl);
+
+      // Skip if no useful title extracted
+      if (!eventData.title || eventData.title.length < 3) {
+        console.log('    Skipping — no title found');
+        continue;
+      }
+
+      // Step 4: Enrich with Claude (clean title/description, find missing image)
+      eventData = await enrichEvent(eventData, name);
+
+      // Step 5: Save
+      var didSave = await saveEvent(placeId, eventData);
+      if (didSave) saved++;
+
+      await new Promise(r => setTimeout(r, 1000));
+    } catch(e) {
+      console.log('    Error: ' + e.message.slice(0, 80));
+    }
+  }
+
+  await browser.close();
+
+  console.log('\n═══════════════════════════════════');
+  console.log('Done! Saved ' + saved + ' events for ' + name);
   console.log('Live at: kesslernir-code.github.io/underground-radar');
+  console.log('═══════════════════════════════════\n');
 }
 
 main().catch(console.error);

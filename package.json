@@ -2,7 +2,7 @@
   "name": "underground-radar",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -15,4 +15,7 @@
     "@anthropic-ai/sdk": "^0.100.1",
     "@supabase/supabase-js": "^2.106.2",
     "dotenv": "^17.4.2",
-    "puppeteer": "^25.1
+    "puppeteer": "^25.1.0",
+    "ws": "^8.21.0"
+  }
+}

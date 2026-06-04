@@ -1,6 +1,6 @@
 # Underground Radar — Project Status
 
-_Last updated: June 3, 2026_
+_Last updated: June 4, 2026_
 
 ---
 
@@ -159,36 +159,64 @@ underground-radar/
 
 ---
 
+## Product Vision
+
+The app has two panels:
+
+**LEFT — My Radar (active feed)**
+- Shows all scraped events from venues you've added, sorted by date
+- When a new venue is added, the system automatically:
+  - Searches the web, Instagram, Facebook, and Telegram for that venue
+  - Finds and fills in all event details (title, date, description, image, link)
+  - Saves everything to the database
+- Daily scraper keeps it fresh automatically every morning
+
+**RIGHT — Discovery (the real magic)**
+- An AI engine that continuously looks for new venues of the same underground/alternative flavor
+- Builds a ranked list of suggested venues the system found on its own (from web, Instagram, Telegram)
+- Each suggestion shows: venue name, location, why it was suggested, sample events
+- You review the list — click "Add" next to any venue → it moves to the left panel and enters regular scraping
+
+---
+
 ## Next Steps (Priority Order)
 
-### Step 1 — Fix וומטמה scraping
-1. Open `https://matmon.space/` and find the URL pattern for individual event pages
-2. Update the source record in Supabase to point to the correct events sub-page (e.g. `/events`)
-3. Optionally: test the scraper locally with `node scraper-vision.js` against that source
+### Step 1 — Fix וומטמה scraping ✅ DONE
+Updated scraper source URL to `https://matmon.space/מטמון-אירועים/`. All 12 events now scrape correctly via direct HTML parse.
 
-### Step 2 — Add more places
-- Use the "+ add place" UI (with `server.js` running) to add new venues
-- Good candidates: Barby, Levontin 7, The Zone, Alphabet, Port Said, Kabareet
-- Each addition auto-triggers the 3-layer scraper
+### Step 2 — Deploy to Railway ✅ DONE
+`server.js` live on Railway. Domain `radar.akibabus.com` configured. DNS records added in Wix. Waiting for TXT verification to complete → site goes live at `radar.akibabus.com/kessler-time`.
 
-### Step 3 — Deploy `server.js` to the cloud
-- So the add-place form works without running anything locally
-- Easiest options: Railway or Render (free tier, deploy from GitHub)
-- Update the `fetch` URL in `index.html` from `localhost:3001` to the deployed URL
+### Step 3 — Verify domain & test live site 🔄 IN PROGRESS
+- Wait for `radar.akibabus.com` to verify in Railway (green checkmark)
+- Test `radar.akibabus.com/kessler-time` — event feed should load
+- Test "+ add place" form end-to-end (no longer needs local server.js)
 
-### Step 4 — Host the frontend
-- `index.html` is currently just a local file
-- Easiest: push to GitHub Pages or Vercel — it's a single static HTML file, no build needed
+### Step 4 — Improve the add-place flow
+When a place is added, the system should:
+- Search Instagram, Facebook, Telegram automatically for the venue
+- Pull event images, descriptions, ticket links from all sources — not just the website
+- Use Claude to normalize and deduplicate events found across multiple sources
 
-### Step 5 — Telegram layer
-- `sources` table already has `type: 'telegram'` support
-- Next: write a scraper for Telegram channels (requires Telegram Bot API or `telegram` npm package)
-- Start by activating the Telegram sources already saved in Supabase for existing places
+### Step 5 — Build the RIGHT panel (Discovery engine)
+New section in the UI next to the event feed. The system:
+1. Looks at the existing venues in the DB and understands the "flavor" (underground, alternative, Tel Aviv/Jerusalem)
+2. Runs a deep web + Instagram + Telegram search for similar venues not yet in the system
+3. Returns a ranked list: venue name, location, vibe description, sample upcoming event
+4. Shows each suggestion as a card with an **"Add"** button
+5. Clicking "Add" → venue goes through the full add-place flow and appears in the left feed
 
-### Step 6 — Clean up
-- Delete `scraper.js` (old version)
-- Delete or merge `Index2.html`
-- Add a README.md with setup instructions
+This is the engine that grows the radar automatically without manual work.
+
+### Step 6 — Telegram layer
+- Write a Telegram channel scraper using the Telegram Bot API
+- Activate the Telegram sources already saved in Supabase
+- Pull events posted to Telegram channels (text + images)
+- Include Telegram events in the left feed
+
+### Step 7 — Add more venues
+- Use the discovery panel (Step 5) to find and add venues
+- Initial manual candidates: Barby, Levontin 7, The Zone, Alphabet, Port Said, Kabareet
 
 ---
 

@@ -174,9 +174,8 @@ async function scrapeWebsite(url, venueName, placeId) {
         var sdMatch = link.match(/[?&]sd=(\d+)/);
         if (sdMatch) {
           var ts = parseInt(sdMatch[1]) * 1000;
-          // sd= timestamps are already in Israel local time - store directly
-          var d = new Date(ts);
-          var isoDate = d.toISOString().slice(0, 16).replace('T', 'T').slice(0, 16) + ':00';
+          // sd= stores Israel time as UTC-like number; subtract 3h to get real UTC
+          var isoDate = new Date((ts - 10800) * 1000).toISOString().slice(0, 19);
           eventData.push({ url: link, date: isoDate });
         }
       });
@@ -332,7 +331,7 @@ async function saveEvents(placeId, events, fallbackUrl) {
       var d = new Date(e.event_date);
       if (d < now || d > twoWeeks) continue;
     }
-    var check = await supabase.from('events').select('id').eq('place_id', placeId).eq('title', e.title).limit(1);
+    var check = await supabase.from('events').select('id').eq('place_id', placeId).ilike('title', e.title).limit(1);
     if (check.data && check.data.length > 0) { console.log('  skip: ' + e.title); continue; }
     var ins = await supabase.from('events').insert([{
       place_id: placeId, title: e.title, event_date: e.event_date,

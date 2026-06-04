@@ -110,14 +110,25 @@ async function scrapeWebsite(browser, url, venueName, placeId) {
     await page.close();
 
     if (links.length > 0) {
-      const msg = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5', max_tokens: 1024,
-        messages: [{ role: 'user', content: [{
-          type: 'text',
-          text: 'From URLs on ' + url + ', find individual event pages. Look for /events/, /show/, or Hebrew-encoded paths like /events/%d7%....\nURLs:\n' + links.slice(0, 200).join('\n') + '\nReturn ONLY JSON array: ["url1","url2"]\nIf none: []'
-        }]}]
-      });
-      const eventLinks = extractJSON(msg.content[0].text);
+      // First try: filter links that look like individual event pages directly (no Claude needed)
+      var domain = new URL(url).origin;
+      var directEventLinks = links.filter(function(l) {
+        return l.includes('/events/') || l.includes('/event/') || l.includes('/show/') || l.includes('/happenings/');
+      }).filter(function(l, i, arr) { return arr.indexOf(l) === i; }); // dedupe
+
+      var eventLinks = directEventLinks;
+
+      // If direct filter found nothing, ask Claude to identify them
+      if (eventLinks.length === 0) {
+        const msg = await anthropic.messages.create({
+          model: 'claude-sonnet-4-5', max_tokens: 1024,
+          messages: [{ role: 'user', content: [{
+            type: 'text',
+            text: 'From these URLs from ' + url + ', find individual event pages (may have /events/, /show/, or Hebrew-encoded paths %d7%).\nURLs:\n' + links.slice(0, 100).join('\n') + '\nReturn ONLY JSON array: ["url1"]\nIf none: []'
+          }]}]
+        });
+        try { eventLinks = extractJSON(msg.content[0].text); } catch(e) { eventLinks = []; }
+      }
       console.log('  [Try 1] Found ' + eventLinks.length + ' individual event pages');
 
       if (eventLinks.length > 0) {

@@ -117,7 +117,8 @@ async function uploadImage(buf, placeId, ext) {
     var fileName = 'events/' + placeId + '_' + Date.now() + '.' + (ext || 'jpg');
     var up = await supabase.storage.from('event-images').upload(fileName, buf, { contentType: 'image/' + (ext || 'jpeg'), upsert: true });
     if (!up.error) return supabase.storage.from('event-images').getPublicUrl(fileName).data.publicUrl;
-  } catch(e) {}
+    else console.log('  Upload error: ' + up.error.message + ' | file: ' + fileName);
+  } catch(e) { console.log('  Upload exception: ' + e.message); }
   return null;
 }
 
@@ -167,18 +168,34 @@ async function scrapeWebsite(url, venueName, placeId) {
       var eventLinks = linkMatches.filter(function(u, i, arr) { return arr.indexOf(u) === i; });
       console.log('  [A] HTML: ' + text.length + ' chars, ' + imgUrls.length + ' images, ' + eventLinks.length + ' event links');
 
+      // Extract event-date pairs directly from URLs (sd= is exact Unix timestamp)
+      var eventData = [];
+      eventLinks.forEach(function(link) {
+        var sdMatch = link.match(/[?&]sd=(\d+)/);
+        if (sdMatch) {
+          var ts = parseInt(sdMatch[1]) * 1000;
+          var d = new Date(ts);
+          // Add 3 hours for Israel timezone (UTC+3)
+          d.setHours(d.getHours() + 3);
+          var isoDate = d.toISOString().slice(0, 19);
+          eventData.push({ url: link, date: isoDate });
+        }
+      });
+      console.log('  [A] Extracted ' + eventData.length + ' events with exact timestamps from URLs');
+
       var msg = await anthropic.messages.create({
         model: 'claude-sonnet-4-5', max_tokens: 8096,
         messages: [{ role: 'user', content: [{
           type: 'text',
           text: 'Extract ALL upcoming events from this venue page.\nVenue: ' + venueName + '\nURL: ' + url + '\n\n' +
             'Page text:\n' + text + '\n\n' +
-            'Event page links found:\n' + eventLinks.slice(0, 30).join('\n') + '\n\n' +
+            'Event URLs with EXACT dates (use these dates, do not guess from text):\n' + 
+            eventData.slice(0, 30).map(function(e) { return e.date + ' → ' + e.url; }).join('\n') + '\n\n' +
             'Images found (by index):\n' + imgUrls.map((u, i) => i + ': ' + u).join('\n') + '\n\n' +
             'Return ONLY JSON array:\n' +
-            '[{"title":"event title","event_date":"2026-06-15T21:00:00","description":"2-3 sentences","image_index":0,"source_url":"individual event URL or venue URL"}]\n' +
+            '[{"title":"event title","event_date":"2026-06-15T21:00:00","description":"2-3 sentences","image_index":0,"source_url":"individual event URL"}]\n' +
+            'IMPORTANT: Use the exact event_date from the URL list above, not dates from the page text.\n' +
             'image_index: pick the index of the event poster image (-1 if none).\n' +
-            'source_url: use individual event URL if available.\n' +
             'If no events: []'
         }]}]
       });
@@ -235,7 +252,7 @@ async function scrapeWebsite(url, venueName, placeId) {
       return u.match(/\/uploads\/.*\.(jpg|jpeg|png|webp|gif)/i);
     });
     var interceptedCount = pageImgs.length;
-    console.log('  [B] Intercepted ' + interceptedCount + ' real images natively');
+    console.log('  [B] Intercepted ' + interceptedCount + ' real images natively (first: ' + (pageImgs[0] || 'none') + ')');
 
     var msg2 = await anthropic.messages.create({
       model: 'claude-sonnet-4-5', max_tokens: 4096,

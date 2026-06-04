@@ -314,107 +314,110 @@ async function main() {
   console.log('Venue now live at: kesslernir-code.github.io/underground-radar');
 }
 
-// Enrich incomplete events: find missing images and individual event page URLs
+// Enrich incomplete events: find individual event pages and update image + URL
 async function enrichEvents(placeId, venueName, profiles) {
   var { data: events } = await supabase.from('events').select('*').eq('place_id', placeId);
   if (!events || events.length === 0) return;
 
-  var listingDomains = ['levontin7.com', 'mazkeka.com', 'radical.org.il', 'matmon.space'];
-  var incomplete = events.filter(function(e) {
-    var missingImage = !e.image_url;
-    var badUrl = !e.source_url || listingDomains.some(function(d) { return e.source_url && e.source_url.includes(d) && !e.source_url.match(/\/[a-z0-9-]{5,}\/[a-z0-9-]{3,}/i); });
-    return missingImage || badUrl;
-  });
+  var incomplete = events.filter(function(e) { return !e.image_url; });
+  if (incomplete.length === 0) { console.log('\nAll events have images — no enrichment needed.'); return; }
 
-  if (incomplete.length === 0) { console.log('\nAll events complete — no enrichment needed.'); return; }
-
-  console.log('\nEnriching ' + incomplete.length + ' incomplete events...');
+  console.log('\nEnriching ' + incomplete.length + ' events missing images...');
 
   var browser = await require('puppeteer').launch({ headless: true, args: ['--ignore-certificate-errors', '--no-sandbox'] });
 
-  for (var i = 0; i < incomplete.length; i++) {
-    var ev = incomplete[i];
-    console.log('\n  Enriching: ' + ev.title);
-    var foundImage = ev.image_url || null;
-    var foundUrl = ev.source_url || null;
+  // Strategy A: Extract all event links from the venue website and match to saved events
+  if (profiles.website) {
+    try {
+      console.log('  [A] Finding individual event pages on website...');
+      var pg = await openPage(browser, profiles.website);
+      var allLinks = await pg.evaluate(function(base) {
+        var domain = new URL(base).origin;
+        return Array.from(document.querySelectorAll('a[href]')).map(function(a) {
+          return { href: a.href.startsWith('http') ? a.href : (a.href.startsWith('/') ? domain + a.href : null), text: (a.innerText || '').trim() };
+        }).filter(function(l) { return l.href && l.href !== base; });
+      }, profiles.website);
+      await pg.close();
 
-    // Strategy A: search venue website for this specific event
-    if (profiles.website && (!foundImage || !foundUrl || foundUrl === profiles.website)) {
-      try {
-        var pg = await openPage(browser, profiles.website);
-        var links = await pg.evaluate(function() {
-          return Array.from(document.querySelectorAll('a[href]')).map(function(a) { return { href: a.href, text: a.innerText }; });
-        });
-        await pg.close();
-        // Find link whose text matches the event title
-        var match = links.find(function(l) { return l.text && l.href && l.text.includes(ev.title.slice(0, 15)); });
-        if (match && match.href !== profiles.website) {
-          console.log('    [A] Found event page on website: ' + match.href);
-          var ePg = await openPage(browser, match.href);
-          var eData = await ePg.evaluate(function() {
-            return {
-              images: Array.from(document.querySelectorAll('img')).filter(function(img) { return img.naturalWidth > 200; }).map(function(img) { return img.src; }).filter(function(s) { return s && s.startsWith('http'); })
-            };
+      // Ask Claude to match links to event titles
+      var eventTitles = incomplete.map(function(e) { return e.title; });
+      var msg = await anthropic.messages.create({
+        model: 'claude-sonnet-4-5', max_tokens: 2048,
+        messages: [{ role: 'user', content: [{
+          type: 'text',
+          text: 'Match these event titles to their individual page URLs from this list of links.\n\n' +
+            'Event titles to find:\n' + eventTitles.map(function(t, i) { return i + ': ' + t; }).join('\n') + '\n\n' +
+            'Available links (text → URL):\n' + allLinks.slice(0, 200).map(function(l) { return '"' + l.text + '" → ' + l.href; }).join('\n') + '\n\n' +
+            'Return ONLY a JSON array matching index to URL:\n' +
+            '[{"index":0,"url":"matched event page URL or null"}]\n' +
+            'Only include entries where you found a clear match.'
+        }]}]
+      });
+      var matches = extractJSON(msg.content[0].text);
+      console.log('  [A] Found ' + matches.length + ' matches on website');
+
+      // Visit each matched page to get image
+      for (var m = 0; m < matches.length; m++) {
+        var match = matches[m];
+        if (!match.url || match.index === undefined) continue;
+        var ev = incomplete[match.index];
+        if (!ev) continue;
+        try {
+          var ePg = await openPage(browser, match.url);
+          var imgs = await ePg.evaluate(function() {
+            return Array.from(document.querySelectorAll('img'))
+              .filter(function(img) { return img.naturalWidth > 200 && img.naturalHeight > 100; })
+              .map(function(img) { return img.src; })
+              .filter(function(s) { return s && s.startsWith('http'); });
           });
           await ePg.close();
-          if (!foundUrl || foundUrl === profiles.website) foundUrl = match.href;
-          if (!foundImage && eData.images.length > 0) foundImage = eData.images[0];
-        }
-      } catch(e) { console.log('    [A] Failed: ' + e.message.slice(0, 50)); }
-    }
+          var updates = { source_url: match.url };
+          if (imgs.length > 0) updates.image_url = imgs[0];
+          await supabase.from('events').update(updates).eq('id', ev.id);
+          console.log('  Updated "' + ev.title + '": url + ' + (updates.image_url ? 'image' : 'no image'));
+          // Mark as enriched
+          ev.image_url = updates.image_url || ev.image_url;
+          ev.source_url = match.url;
+        } catch(e) { console.log('  Failed to visit ' + match.url); }
+        await new Promise(r => setTimeout(r, 800));
+      }
+    } catch(e) { console.log('  [A] Failed: ' + e.message.slice(0, 80)); }
+  }
 
-    // Strategy B: Google search for this specific event
-    if (!foundImage || !foundUrl) {
-      try {
-        var msg = await anthropic.messages.create({
-          model: 'claude-sonnet-4-5', max_tokens: 1000,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          messages: [{ role: 'user', content:
-            'Search for the specific event "' + ev.title + '" at "' + venueName + '" in Israel 2026.\n' +
-            'Find:\n1. The direct event page URL (on venue site or Facebook Events)\n2. An image/poster for this event\n\n' +
-            'Return ONLY JSON:\n{"event_url":"direct URL to this specific event or null","image_url":"direct image URL or null"}'
-          }]
-        });
-        var tb = msg.content.find(function(b) { return b.type === 'text'; });
-        if (tb) {
-          var found = extractJSON(tb.text);
-          if (found.event_url && (!foundUrl || foundUrl === profiles.website)) { foundUrl = found.event_url; console.log('    [B] Found event URL: ' + foundUrl); }
-          if (found.image_url && !foundImage) { foundImage = found.image_url; console.log('    [B] Found image: ' + foundImage); }
-        }
-      } catch(e) { console.log('    [B] Failed: ' + e.message.slice(0, 50)); }
-    }
-
-    // Strategy C: Facebook Events search
-    if (profiles.facebook && !foundImage) {
+  // Strategy B: For still-missing events, search individually
+  var stillMissing = incomplete.filter(function(e) { return !e.image_url; });
+  if (stillMissing.length > 0) {
+    console.log('  [B] Web searching for ' + stillMissing.length + ' remaining events...');
+    for (var j = 0; j < stillMissing.length; j++) {
+      var ev = stillMissing[j];
       try {
         var msg2 = await anthropic.messages.create({
           model: 'claude-sonnet-4-5', max_tokens: 800,
           tools: [{ type: 'web_search_20250305', name: 'web_search' }],
           messages: [{ role: 'user', content:
-            'Search Facebook Events for "' + ev.title + '" at ' + profiles.facebook + '.\n' +
-            'Return ONLY JSON: {"event_url":"facebook event URL or null","image_url":"event image URL or null"}'
+            'Find the event page and poster image for: "' + ev.title + '" at ' + venueName + ' (venue in Tel Aviv/Israel) in 2026.\n' +
+            'Search the venue website, Facebook Events, or any event listing.\n' +
+            'Return ONLY valid JSON on one line: {"event_url":"URL or null","image_url":"direct image URL or null"}'
           }]
         });
-        var tb2 = msg2.content.find(function(b) { return b.type === 'text'; });
-        if (tb2) {
-          var found2 = extractJSON(tb2.text);
-          if (found2.event_url && !foundUrl) { foundUrl = found2.event_url; console.log('    [C] Found FB event: ' + foundUrl); }
-          if (found2.image_url && !foundImage) { foundImage = found2.image_url; console.log('    [C] Found FB image: ' + foundImage); }
+        var tb = msg2.content.find(function(b) { return b.type === 'text'; });
+        if (tb) {
+          try {
+            var found = extractJSON(tb.text);
+            var upd = {};
+            if (found.event_url && found.event_url !== 'null') upd.source_url = found.event_url;
+            if (found.image_url && found.image_url !== 'null') upd.image_url = found.image_url;
+            if (Object.keys(upd).length > 0) {
+              await supabase.from('events').update(upd).eq('id', ev.id);
+              console.log('  [B] Updated "' + ev.title + '": ' + JSON.stringify(upd).slice(0, 80));
+            } else {
+              console.log('  [B] No data found for: ' + ev.title);
+            }
+          } catch(e2) { console.log('  [B] Parse failed for: ' + ev.title); }
         }
-      } catch(e) { console.log('    [C] Failed: ' + e.message.slice(0, 50)); }
+      } catch(e) { console.log('  [B] Search failed: ' + e.message.slice(0, 50)); }
+      await new Promise(r => setTimeout(r, 1000));
     }
-
-    // Update DB if we found anything new
-    var updates = {};
-    if (foundImage && foundImage !== ev.image_url) updates.image_url = foundImage;
-    if (foundUrl && foundUrl !== ev.source_url) updates.source_url = foundUrl;
-    if (Object.keys(updates).length > 0) {
-      await supabase.from('events').update(updates).eq('id', ev.id);
-      console.log('    Updated: ' + JSON.stringify(updates).slice(0, 80));
-    } else {
-      console.log('    No new data found for this event');
-    }
-    await new Promise(r => setTimeout(r, 500));
   }
 
   await browser.close();

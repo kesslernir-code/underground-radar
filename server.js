@@ -363,5 +363,31 @@ const server = http.createServer(async function(req, res) {
         }
 
         var placeId = result.data[0].id;
-        console.log('\n✅ Place saved: ' + name);
-
+        console.log('\nPlace saved: ' + name);
+
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          success: true,
+          message: '"' + name + '" added — scraping started'
+        }));
+
+        scrapePlace(placeId, name, url).catch(function(err) {
+          console.log('Scraper error: ' + err.message);
+        });
+
+      } catch (err) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'Invalid request' }));
+      }
+    });
+    return;
+  }
+
+  res.writeHead(404);
+  res.end();
+});
+
+var PORT = process.env.PORT || 3001;
+server.listen(PORT, function() {
+  console.log('Server running on port ' + PORT);
+});

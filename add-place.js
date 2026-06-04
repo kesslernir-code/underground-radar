@@ -174,8 +174,8 @@ async function scrapeWebsite(url, venueName, placeId) {
         var sdMatch = link.match(/[?&]sd=(\d+)/);
         if (sdMatch) {
           var ts = parseInt(sdMatch[1]) * 1000;
-          // sd= stores Israel time as UTC-like number; subtract 3h to get real UTC
-          var isoDate = new Date((ts - 10800) * 1000).toISOString().slice(0, 19);
+          // sd= stores Israel time as UTC-like number; subtract 2h (Israel = UTC+2) to get real UTC
+          var isoDate = new Date((ts - 7200) * 1000).toISOString().slice(0, 19);
           eventData.push({ url: link, date: isoDate });
         }
       });

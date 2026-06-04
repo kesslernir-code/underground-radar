@@ -14,7 +14,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
     "@supabase/supabase-js": "^2.106.2",
-    "dotenv": "^17.4.2",
+    "dotenv": "^16.4.5",
     "puppeteer": "^25.1.0",
     "ws": "^8.21.0"
   }

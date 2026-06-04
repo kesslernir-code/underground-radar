@@ -200,6 +200,20 @@ async function scrapeWebsite(url, venueName, placeId) {
       var events = extractJSON(msg.content[0].text);
       console.log('  [A] Claude found ' + events.length + ' events');
 
+      // Inject exact dates from URL timestamps (override Claude's guessed dates)
+      events.forEach(function(e) {
+        var matchData = eventData.find(function(ed) { return ed.url === e.source_url; });
+        if (matchData) {
+          e.event_date = matchData.date;
+        } else if (!e.event_date && e.source_url) {
+          // Try to find date from URL even if source_url doesn't exactly match
+          var sdMatch = (e.source_url || '').match(/[?&]sd=(\d+)/);
+          if (sdMatch) {
+            e.event_date = new Date((parseInt(sdMatch[1]) - 7200) * 1000).toISOString().slice(0, 19);
+          }
+        }
+      });
+
       if (events.length > 0) {
         for (var i = 0; i < events.length; i++) {
           var e = events[i];
@@ -299,8 +313,8 @@ async function scrapeWebsite(url, venueName, placeId) {
       }
       console.log('');
     }
-    // Also save any NEW events found by B that A missed
-    var bSaved = await saveEvents(placeId, events2, url);
+    // Strategy B only enriches images — A already saved events, don't add duplicates
+    var bSaved = 0;
     return bSaved;
   } catch(e) { console.log('  [B] Failed: ' + e.message.slice(0, 80)); }
 

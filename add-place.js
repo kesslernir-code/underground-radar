@@ -5,14 +5,14 @@ const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 const https = require('https');
 const http = require('http');
+const zlib = require('zlib');
 
-// Usage: node add-place.js "Venue Name" "https://any-url.com" [city]
 const name = process.argv[2];
 const inputUrl = process.argv[3];
 const city = process.argv[4] || 'Tel Aviv';
 
 if (!name || !inputUrl) {
-  console.log('Usage: node add-place.js "Venue Name" "https://url-or-instagram-or-facebook" [city]');
+  console.log('Usage: node add-place.js "Venue Name" "https://url" [city]');
   process.exit(1);
 }
 
@@ -21,381 +21,280 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_KEY });
 
 function detectPlatform(url) {
   if (url.includes('instagram.com')) return 'instagram';
-  if (url.includes('facebook.com') || url.includes('fb.com')) return 'facebook';
+  if (url.includes('facebook.com')) return 'facebook';
   if (url.includes('t.me') || url.includes('telegram')) return 'telegram';
   return 'website';
 }
 
 function extractJSON(text) {
   const cleaned = text.trim().replace(/```json|```/g, '').trim();
-  const arrStart = cleaned.indexOf('[');
-  const objStart = cleaned.indexOf('{');
-  if (arrStart === -1 && objStart === -1) throw new Error('No JSON found');
+  const arrStart = cleaned.indexOf('['), objStart = cleaned.indexOf('{');
+  if (arrStart === -1 && objStart === -1) throw new Error('No JSON');
   const start = (arrStart === -1) ? objStart : (objStart === -1) ? arrStart : Math.min(arrStart, objStart);
-  const isArr = cleaned[start] === '[';
-  const end = isArr ? cleaned.lastIndexOf(']') : cleaned.lastIndexOf('}');
+  const end = cleaned[start] === '[' ? cleaned.lastIndexOf(']') : cleaned.lastIndexOf('}');
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-async function openPage(browser, url) {
-  const page = await browser.newPage();
-  page.setDefaultNavigationTimeout(45000);
-  await page.setViewport({ width: 1280, height: 900 });
-  try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-  } catch (e) {
-    console.log('  (page load: ' + e.message.slice(0, 50) + ')');
-  }
-  await new Promise(r => setTimeout(r, 4000));
-  await page.evaluate(() => window.scrollBy(0, 800));
-  await new Promise(r => setTimeout(r, 1500));
-  return page;
-}
-
-// Download image with Referer spoofing to bypass hotlink protection
-function downloadImageBuffer(imageUrl, referer) {
+// Fetch page HTML via Node.js (avoids headless browser detection by Cloudflare etc.)
+function fetchHTML(pageUrl) {
   return new Promise(function(resolve) {
-    var parsed = new URL(imageUrl);
-    var lib = parsed.protocol === 'https:' ? https : http;
-    var options = {
-      hostname: parsed.hostname,
-      path: parsed.pathname + parsed.search,
-      headers: {
-        'Referer': referer || parsed.origin,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'image/*'
-      }
-    };
-    var req = lib.get(options, function(res) {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        // Follow redirect
-        downloadImageBuffer(res.headers.location, referer).then(resolve);
-        return;
-      }
-      var chunks = [];
-      res.on('data', function(c) { chunks.push(c); });
-      res.on('end', function() {
-        var buf = Buffer.concat(chunks);
-        resolve(buf.length > 500 ? buf : null);
+    try {
+      var parsed = new URL(pageUrl);
+      var lib = parsed.protocol === 'https:' ? https : http;
+      var options = {
+        hostname: parsed.hostname,
+        path: parsed.pathname + parsed.search,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive'
+        }
+      };
+      var req = lib.get(options, function(res) {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          fetchHTML(new URL(res.headers.location, pageUrl).href).then(resolve);
+          return;
+        }
+        var chunks = [];
+        res.on('data', function(c) { chunks.push(c); });
+        res.on('end', function() {
+          var buf = Buffer.concat(chunks);
+          var enc = res.headers['content-encoding'];
+          try {
+            if (enc === 'gzip') { zlib.gunzip(buf, function(e, r) { resolve(e ? buf.toString() : r.toString()); }); }
+            else if (enc === 'br') { zlib.brotliDecompress(buf, function(e, r) { resolve(e ? buf.toString() : r.toString()); }); }
+            else resolve(buf.toString());
+          } catch(e) { resolve(buf.toString()); }
+        });
       });
-    });
-    req.on('error', function() { resolve(null); });
-    req.setTimeout(10000, function() { req.destroy(); resolve(null); });
+      req.on('error', function() { resolve(null); });
+      req.setTimeout(15000, function() { req.destroy(); resolve(null); });
+    } catch(e) { resolve(null); }
   });
 }
 
-// UNIVERSAL image handler: download with Referer spoofing, upload to Supabase Storage
-// Falls back to Puppeteer screenshot if download fails
-async function getAndStoreImage(page, imageUrl, placeId, pageUrl) {
-  // Try to download with Referer set to the venue's own domain
-  if (imageUrl) {
+// Download image with NO Referer — simulates direct navigation, bypasses hotlink protection
+function downloadImage(imageUrl) {
+  return new Promise(function(resolve) {
     try {
-      var referer = pageUrl || (imageUrl ? new URL(imageUrl).origin : 'https://levontin7.com');
-      var buf = await downloadImageBuffer(imageUrl, referer);
-      if (buf) {
-        var ext = ((imageUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) || [])[1] || 'jpg').toLowerCase();
-        var fileName = 'events/' + placeId + '_' + Date.now() + '.' + ext;
-        var up = await supabase.storage.from('event-images').upload(fileName, buf, { contentType: 'image/' + ext, upsert: true });
-        if (!up.error) return supabase.storage.from('event-images').getPublicUrl(fileName).data.publicUrl;
-      }
-    } catch(e) {}
-  }
-
-  // Fallback: screenshot of the current page
-  if (page) {
-    try {
-      var shot = await page.screenshot({ encoding: 'base64', clip: { x: 0, y: 0, width: 1280, height: 600 } });
-      var fileName2 = 'events/' + placeId + '_screenshot_' + Date.now() + '.png';
-      var up2 = await supabase.storage.from('event-images').upload(fileName2, Buffer.from(shot, 'base64'), { contentType: 'image/png', upsert: true });
-      if (!up2.error) return supabase.storage.from('event-images').getPublicUrl(fileName2).data.publicUrl;
-    } catch(e) {}
-  }
-
-  return imageUrl || null;
+      var parsed = new URL(imageUrl);
+      var lib = parsed.protocol === 'https:' ? https : http;
+      var options = {
+        hostname: parsed.hostname,
+        path: parsed.pathname + parsed.search,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120',
+          'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
+          // NO Referer = direct navigation = bypasses hotlink protection
+        }
+      };
+      var req = lib.get(options, function(res) {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          downloadImage(res.headers.location).then(resolve); return;
+        }
+        if (res.statusCode !== 200) { resolve(null); return; }
+        var chunks = [];
+        res.on('data', function(c) { chunks.push(c); });
+        res.on('end', function() {
+          var buf = Buffer.concat(chunks);
+          // Verify it's a real image by checking magic bytes
+          var magic = buf.slice(0, 4).toString('hex');
+          var isReal = magic.startsWith('ffd8') || magic.startsWith('8950') ||
+                       magic.startsWith('4749') || magic.startsWith('5249') || magic.startsWith('424d');
+          resolve(isReal && buf.length > 1000 ? buf : null);
+        });
+      });
+      req.on('error', function() { resolve(null); });
+      req.setTimeout(12000, function() { req.destroy(); resolve(null); });
+    } catch(e) { resolve(null); }
+  });
 }
 
-// Find all social profiles for a venue
-async function findAllProfiles(venueName, knownUrl, knownPlatform) {
-  console.log('\nSearching for all profiles of: ' + venueName);
-  const profiles = { website: null, instagram: null, facebook: null, telegram: null };
-  profiles[knownPlatform] = knownUrl;
-
+async function uploadImage(buf, placeId, ext) {
   try {
-    const msg = await anthropic.messages.create({
+    var fileName = 'events/' + placeId + '_' + Date.now() + '.' + (ext || 'jpg');
+    var up = await supabase.storage.from('event-images').upload(fileName, buf, { contentType: 'image/' + (ext || 'jpeg'), upsert: true });
+    if (!up.error) return supabase.storage.from('event-images').getPublicUrl(fileName).data.publicUrl;
+  } catch(e) {}
+  return null;
+}
+
+async function getAndStoreImage(imageUrl, placeId) {
+  if (!imageUrl) return null;
+  var buf = await downloadImage(imageUrl);
+  if (!buf) return imageUrl; // last resort: keep original URL
+  var ext = ((imageUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) || [])[1] || 'jpg').toLowerCase();
+  return await uploadImage(buf, placeId, ext) || imageUrl;
+}
+
+async function findAllProfiles(venueName, knownUrl, platform) {
+  console.log('\nSearching profiles for: ' + venueName);
+  var profiles = { website: null, instagram: null, facebook: null, telegram: null };
+  profiles[platform] = knownUrl;
+  try {
+    var msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-5', max_tokens: 1024,
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-      messages: [{ role: 'user', content:
-        'Find the website, Instagram, Facebook, and Telegram for the Israeli venue "' + venueName + '"' +
-        (knownPlatform !== 'website' ? ' (known ' + knownPlatform + ': ' + knownUrl + ')' : ' (website: ' + knownUrl + ')') +
-        '. Return ONLY JSON: {"website":"url or null","instagram":"url or null","facebook":"url or null","telegram":"url or null"}'
-      }]
+      messages: [{ role: 'user', content: 'Find website, Instagram, Facebook, Telegram for Israeli venue "' + venueName + '"' +
+        (platform !== 'website' ? ' (' + platform + ': ' + knownUrl + ')' : ' (website: ' + knownUrl + ')') +
+        '. Return ONLY JSON: {"website":"url or null","instagram":"url or null","facebook":"url or null","telegram":"url or null"}' }]
     });
-    const tb = msg.content.find(b => b.type === 'text');
+    var tb = msg.content.find(b => b.type === 'text');
     if (tb) {
-      const found = extractJSON(tb.text);
-      Object.keys(found).forEach(function(k) {
-        if (found[k] && !profiles[k]) { profiles[k] = found[k]; console.log('  Found ' + k + ': ' + found[k]); }
-      });
+      var found = extractJSON(tb.text);
+      Object.keys(found).forEach(k => { if (found[k] && !profiles[k]) { profiles[k] = found[k]; console.log('  Found ' + k + ': ' + found[k]); } });
     }
-  } catch (e) { console.log('  Profile search: ' + e.message.slice(0, 60)); }
-
-  profiles[knownPlatform] = knownUrl;
+  } catch(e) { console.log('  Profile search: ' + e.message.slice(0, 60)); }
+  profiles[platform] = knownUrl;
   return profiles;
 }
 
-// Universal 4-strategy scraper — works for any website
-async function scrapeWebsite(browser, url, venueName, placeId) {
+async function scrapeWebsite(url, venueName, placeId) {
   console.log('\nScraping: ' + url);
-  var saved = 0;
 
-  // STRATEGY 0: Extract events directly from rendered DOM
-  // Intercepts image network responses as they load — bypasses all hotlink protection
+  // STRATEGY A: Node.js HTML fetch — avoids Cloudflare/bot detection
+  // Works for: any server-rendered site, WordPress, static HTML
   try {
-    console.log('  [S0] DOM extraction + image interception...');
-    const page = await browser.newPage();
-    page.setDefaultNavigationTimeout(45000);
-    await page.setViewport({ width: 1280, height: 900 });
+    console.log('  [A] Fetching HTML directly...');
+    var html = await fetchHTML(url);
+    if (html && html.length > 1000) {
+      var text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 9000);
+      var imgMatches = html.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp|gif)[^"'\s<>]*/gi) || [];
+      var imgUrls = imgMatches.filter(function(u, i, arr) { return arr.indexOf(u) === i; }).slice(0, 80);
+      var linkMatches = html.match(/https?:\/\/[^"'\s<>]*\/events\/[^"'\s<>]*/gi) || [];
+      var eventLinks = linkMatches.filter(function(u, i, arr) { return arr.indexOf(u) === i; });
+      console.log('  [A] HTML: ' + text.length + ' chars, ' + imgUrls.length + ' images, ' + eventLinks.length + ' event links');
 
-    // Intercept all image responses as they load naturally (no hotlink protection applies)
-    var interceptedImages = {};
-    page.on('response', async function(response) {
-      try {
-        var rUrl = response.url();
-        var ct = response.headers()['content-type'] || '';
-        if (ct.includes('image/') && response.status() === 200) {
-          var buf = await response.buffer();
-          if (buf && buf.length > 2000) interceptedImages[rUrl] = buf;
-        }
-      } catch(e) {}
-    });
-
-    try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    } catch(e) { console.log('  (page load: ' + e.message.slice(0, 50) + ')'); }
-    await new Promise(r => setTimeout(r, 5000)); // Wait longer for images to load
-    await page.evaluate(() => window.scrollBy(0, 800));
-    await new Promise(r => setTimeout(r, 2000));
-
-    var domEvents = await page.evaluate(function() {
-      var results = [];
-      var seen = {};
-      // Find all links that look like event pages
-      Array.from(document.querySelectorAll('a[href]')).forEach(function(a) {
-        var href = a.href;
-        if (!href || seen[href] || href === window.location.href) return;
-        // Look for event-like URL patterns
-        var isEventUrl = href.includes('/event') || href.includes('/show') || href.includes('/happenings') ||
-          href.match(/\/[a-zA-Z0-9%\-_]{5,}\/$/) || href.includes('?sd=');
-        if (!isEventUrl) return;
-        seen[href] = true;
-        // Find image near this link
-        var container = a.closest('li, article, div[class*="event"], div[class*="item"]') || a.parentElement;
-        var img = container ? container.querySelector('img') : null;
-        if (!img) img = a.querySelector('img');
-        var imgSrc = img ? img.src : null;
-        // Extract timestamp from URL if available
-        var sdMatch = href.match(/[?&]sd=(\d+)/);
-        var eventDate = sdMatch ? new Date(parseInt(sdMatch[1]) * 1000).toISOString().slice(0, 19) : null;
-        var title = a.innerText.trim() || a.title || '';
-        if (title.length > 1) results.push({ source_url: href, title: title, event_date: eventDate, raw_image: imgSrc });
+      var msg = await anthropic.messages.create({
+        model: 'claude-sonnet-4-5', max_tokens: 4096,
+        messages: [{ role: 'user', content: [{
+          type: 'text',
+          text: 'Extract ALL upcoming events from this venue page.\nVenue: ' + venueName + '\nURL: ' + url + '\n\n' +
+            'Page text:\n' + text + '\n\n' +
+            'Event page links found:\n' + eventLinks.slice(0, 30).join('\n') + '\n\n' +
+            'Images found (by index):\n' + imgUrls.map((u, i) => i + ': ' + u).join('\n') + '\n\n' +
+            'Return ONLY JSON array:\n' +
+            '[{"title":"event title","event_date":"2026-06-15T21:00:00","description":"2-3 sentences","image_index":0,"source_url":"individual event URL or venue URL"}]\n' +
+            'image_index: pick the index of the event poster image (-1 if none).\n' +
+            'source_url: use individual event URL if available.\n' +
+            'If no events: []'
+        }]}]
       });
-      return results;
+      var events = extractJSON(msg.content[0].text);
+      console.log('  [A] Claude found ' + events.length + ' events');
+
+      if (events.length > 0) {
+        for (var i = 0; i < events.length; i++) {
+          var e = events[i];
+          var imgUrl = e.image_index >= 0 && imgUrls[e.image_index] ? imgUrls[e.image_index] : null;
+          e.image_url = await getAndStoreImage(imgUrl, placeId);
+          process.stdout.write(e.image_url && !e.image_url.includes(new URL(url).hostname) ? '✓' : '·');
+        }
+        console.log('');
+        var saved = await saveEvents(placeId, events, url);
+        if (saved > 0) return saved;
+      }
+    }
+  } catch(e) { console.log('  [A] Failed: ' + e.message.slice(0, 80)); }
+
+  // STRATEGY B: Puppeteer with response interception
+  // Works for: heavily JS-rendered sites where Node.js fetch returns minimal content
+  // Key: intercept images as Chrome loads them natively — no hotlink protection possible
+  try {
+    console.log('  [B] Puppeteer + image interception...');
+    var browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--ignore-certificate-errors'] });
+    var page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120');
+
+    // Intercept ALL image responses as Chrome downloads them naturally
+    var intercepted = {};
+    page.on('response', async function(r) {
+      try {
+        var ct = r.headers()['content-type'] || '';
+        if (ct.includes('image/') && r.status() === 200) {
+          var buf = await r.buffer();
+          if (buf && buf.length > 2000) intercepted[r.url()] = buf;
+        }
+      } catch(e2) {}
     });
 
-    console.log('  [S0] Found ' + domEvents.length + ' event links in DOM');
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 6000));
+    await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+    await new Promise(r => setTimeout(r, 3000));
 
-    console.log('  [S0] Intercepted ' + Object.keys(interceptedImages).length + ' images from page load');
-
-    if (domEvents.length > 0) {
-      // Match intercepted images to events and upload to Supabase Storage
-      for (var i = 0; i < domEvents.length; i++) {
-        var e = domEvents[i];
-        var imgBuf = e.raw_image ? interceptedImages[e.raw_image] : null;
-        if (imgBuf) {
-          // We have the actual image bytes — upload to Supabase Storage
-          var ext = ((e.raw_image || '').match(/\.(jpg|jpeg|png|webp|gif)/i) || ['jpg'])[1] || 'jpg';
-          var fileName = 'events/' + placeId + '_' + i + '_' + Date.now() + '.' + ext;
-          var up = await supabase.storage.from('event-images').upload(fileName, imgBuf, { contentType: 'image/' + ext, upsert: true });
-          if (!up.error) {
-            e.image_url = supabase.storage.from('event-images').getPublicUrl(fileName).data.publicUrl;
-          }
-        } else if (!e.raw_image) {
-          // No image URL at all - screenshot fallback
-          e.image_url = null;
-        } else {
-          // Image URL exists but wasn't intercepted (didn't load on page)
-          e.image_url = await getAndStoreImage(null, e.raw_image, placeId, url);
-        }
-        process.stdout.write(e.image_url ? '✓' : '·');
-      }
-      console.log('');
-      await page.close();
-      // Clean up titles with Claude
-      try {
-        var cleanMsg = await anthropic.messages.create({
-          model: 'claude-sonnet-4-5', max_tokens: 2048,
-          messages: [{ role: 'user', content: [{
-            type: 'text',
-            text: 'Clean these event entries. Fix truncated titles, add description from URL context.\n' +
-              'Input: ' + JSON.stringify(domEvents.slice(0, 30).map(function(e, i) { return { i: i, title: e.title, url: e.source_url }; })) + '\n' +
-              'Return ONLY JSON: [{"i":0,"title":"clean title","description":"1-2 sentence description or null"}]'
-          }]}]
-        });
-        var cleaned = extractJSON(cleanMsg.content[0].text);
-        cleaned.forEach(function(c) { if (domEvents[c.i]) { domEvents[c.i].title = c.title || domEvents[c.i].title; domEvents[c.i].description = c.description; }});
-      } catch(e2) {}
-      saved = await saveEvents(placeId, domEvents, url);
-      if (saved > 0) return saved;
-    } else {
-      await page.close();
-    }
-  } catch (e) { console.log('  [S0] Failed: ' + e.message.slice(0, 80)); }
-
-  // STRATEGY 1: Parse listing page text with Claude
-  // Works for: sites without /events/ URLs, listing-only sites
-  try {
-    console.log('  [S1] Text parse...');
-    const page = await openPage(browser, url);
-    const text = await page.evaluate(() => document.body.innerText.slice(0, 8000));
-    const imgs = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('img'))
-        .filter(img => img.naturalWidth > 100)
-        .map(img => ({ src: img.src, alt: img.alt }))
-        .filter(i => i.src && i.src.startsWith('http'))
+    var pageText = await page.evaluate(() => document.body.innerText.slice(0, 8000));
+    var pageImgs = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('img')).filter(i => i.naturalWidth > 80).map(i => i.src).filter(s => s && s.startsWith('http'))
     );
-    const imgList = imgs.slice(0, 40).map((img, i) => i + ': ' + img.src).join('\n') || 'none';
+    await browser.close();
 
-    const msg = await anthropic.messages.create({
+    var interceptedCount = Object.keys(intercepted).length;
+    console.log('  [B] Intercepted ' + interceptedCount + ' images natively');
+
+    var msg2 = await anthropic.messages.create({
       model: 'claude-sonnet-4-5', max_tokens: 4096,
       messages: [{ role: 'user', content: [{
         type: 'text',
-        text: 'Events page for "' + venueName + '".\nURL: ' + url + '\nText:\n' + text + '\nImages:\n' + imgList +
-          '\n\nExtract ALL upcoming events. Return ONLY JSON array:\n' +
-          '[{"title":"...","event_date":"2026-06-15T20:00:00","description":"...","image_index":-1,"source_url":"individual event URL or this page URL"}]\n' +
-          'For image_index: use the index from the images list that matches this event, or -1 if none.\nIf no events: []'
+        text: 'Extract ALL upcoming events.\nVenue: ' + venueName + '\nPage text:\n' + pageText + '\nImages:\n' + pageImgs.map((u,i) => i+': '+u).join('\n') +
+          '\nReturn ONLY JSON:\n[{"title":"...","event_date":"2026-06-15T21:00:00","description":"...","image_index":0,"source_url":"event URL or venue URL"}]\nIf none: []'
       }]}]
     });
-    const events = extractJSON(msg.content[0].text);
-    console.log('  [S1] Found ' + events.length + ' events');
+    var events2 = extractJSON(msg2.content[0].text);
+    console.log('  [B] Claude found ' + events2.length + ' events');
 
-    if (events.length > 0) {
-      // Intercept images as page loads for S1 too
-      var s1Intercepted = {};
-      page.on('response', async function(r1) {
-        try {
-          var r1Url = r1.url();
-          var ct1 = r1.headers()['content-type'] || '';
-          if (ct1.includes('image/') && r1.status() === 200) {
-            var buf1 = await r1.buffer();
-            if (buf1 && buf1.length > 2000) s1Intercepted[r1Url] = buf1;
-          }
-        } catch(e) {}
-      });
-
-      for (var j = 0; j < events.length; j++) {
-        var ev = events[j];
-        var imgSrc = ev.image_index >= 0 && imgs[ev.image_index] ? imgs[ev.image_index].src : null;
-        var interceptedBuf = imgSrc ? (interceptedImages[imgSrc] || s1Intercepted[imgSrc]) : null;
-        if (interceptedBuf) {
-          var ext2 = ((imgSrc || '').match(/\.(jpg|jpeg|png|webp|gif)/i) || ['jpg'])[1] || 'jpg';
-          var fn2 = 'events/' + placeId + '_s1_' + j + '_' + Date.now() + '.' + ext2;
-          var up2 = await supabase.storage.from('event-images').upload(fn2, interceptedBuf, { contentType: 'image/' + ext2, upsert: true });
-          if (!up2.error) ev.image_url = supabase.storage.from('event-images').getPublicUrl(fn2).data.publicUrl;
-        } else {
-          ev.image_url = await getAndStoreImage(page, imgSrc, placeId, url);
-        }
-        process.stdout.write(ev.image_url ? '✓' : '·');
+    for (var j = 0; j < events2.length; j++) {
+      var e2 = events2[j];
+      var imgSrc = e2.image_index >= 0 ? pageImgs[e2.image_index] : null;
+      if (imgSrc && intercepted[imgSrc]) {
+        // Use natively intercepted image — bypasses all hotlink protection
+        var ext2 = ((imgSrc.match(/\.(jpg|jpeg|png|webp|gif)/i) || [])[1] || 'jpg').toLowerCase();
+        e2.image_url = await uploadImage(intercepted[imgSrc], placeId, ext2);
+        process.stdout.write(e2.image_url ? '✓' : '·');
+      } else {
+        e2.image_url = await getAndStoreImage(imgSrc, placeId);
+        process.stdout.write(e2.image_url && !imgSrc || !e2.image_url.includes(new URL(url).hostname) ? '✓' : '·');
       }
-      console.log('');
-      await page.close();
-      saved = await saveEvents(placeId, events, url);
-      if (saved > 0) return saved;
-    } else {
-      await page.close();
-    }
-  } catch (e) { console.log('  [S1] Failed: ' + e.message.slice(0, 80)); }
-
-  // STRATEGY 2: Screenshot + Vision AI
-  // Works for: any site including JavaScript-heavy ones
-  try {
-    console.log('  [S2] Screenshot + Vision...');
-    const page = await openPage(browser, url);
-    const screenshot = await page.screenshot({ encoding: 'base64', fullPage: false });
-    const imageUrls = await page.evaluate(function() {
-      return Array.from(document.querySelectorAll('img'))
-        .filter(img => img.naturalWidth > 150)
-        .map(img => img.src)
-        .filter(src => src && src.startsWith('http'));
-    });
-
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5', max_tokens: 2048,
-      messages: [{ role: 'user', content: [
-        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot } },
-        { type: 'text', text: 'Events page for "' + venueName + '". Images on page:\n' + imageUrls.slice(0, 30).map((u,i) => i+': '+u).join('\n') +
-          '\n\nExtract ALL upcoming events visible. Return ONLY JSON array:\n' +
-          '[{"title":"...","event_date":"2026-06-15T20:00:00","description":"...","image_index":0,"event_url":"url or null"}]\nIf none: []' }
-      ]}]
-    });
-    const events = extractJSON(msg.content[0].text);
-    console.log('  [S2] Found ' + events.length + ' events');
-
-    for (var k = 0; k < events.length; k++) {
-      var ev2 = events[k];
-      var imgSrc2 = ev2.image_index >= 0 ? imageUrls[ev2.image_index] : null;
-      ev2.image_url = await getAndStoreImage(page, imgSrc2, placeId, url);
-      ev2.source_url = ev2.event_url || url;
-      process.stdout.write(ev2.image_url ? '✓' : '·');
     }
     console.log('');
-    await page.close();
-    saved = await saveEvents(placeId, events, url);
-  } catch (e) { console.log('  [S2] Failed: ' + e.message.slice(0, 80)); }
+    return await saveEvents(placeId, events2, url);
+  } catch(e) { console.log('  [B] Failed: ' + e.message.slice(0, 80)); }
 
-  return saved;
+  return 0;
 }
 
-// Web search fallback for events
-async function searchForEvents(venueName, profiles) {
-  console.log('\nWeb search for events at: ' + venueName);
+async function searchForEvents(venueName) {
+  console.log('\n  Web search for: ' + venueName);
   try {
-    const msg = await anthropic.messages.create({
+    var msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-5', max_tokens: 2000,
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-      messages: [{ role: 'user', content:
-        'Search for ALL upcoming events at "' + venueName + '" in Tel Aviv, Israel in 2026. ' +
-        'Find event names, dates, descriptions. Return ONLY JSON array:\n' +
-        '[{"title":"...","event_date":"2026-06-15T21:00:00","description":"...","source_url":"where found","image_url":null}]\n' +
-        'If no events: []'
-      }]
+      messages: [{ role: 'user', content: 'Find upcoming events at "' + venueName + '" in Tel Aviv Israel in 2026. Return ONLY JSON:\n[{"title":"...","event_date":"2026-06-15T21:00:00","description":"...","source_url":"...","image_url":null}]\nIf none: []' }]
     });
-    const tb = msg.content.find(b => b.type === 'text');
-    if (!tb) return [];
-    return extractJSON(tb.text);
-  } catch (e) { console.log('  Web search failed: ' + e.message.slice(0, 60)); return []; }
+    var tb = msg.content.find(b => b.type === 'text');
+    return tb ? extractJSON(tb.text) : [];
+  } catch(e) { return []; }
 }
 
 async function saveEvents(placeId, events, fallbackUrl) {
   var saved = 0;
   var now = new Date();
-  var twoWeeksFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-
+  var twoWeeks = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
   for (var i = 0; i < events.length; i++) {
     var e = events[i];
     if (!e || !e.title || e.title.length < 2) continue;
-
     if (e.event_date) {
       var d = new Date(e.event_date);
-      if (d < now || d > twoWeeksFromNow) { continue; }
+      if (d < now || d > twoWeeks) continue;
     }
-
-    var sourceUrl = e.source_url || fallbackUrl;
     var check = await supabase.from('events').select('id').eq('place_id', placeId).eq('title', e.title).limit(1);
     if (check.data && check.data.length > 0) { console.log('  skip: ' + e.title); continue; }
-
     var ins = await supabase.from('events').insert([{
       place_id: placeId, title: e.title, event_date: e.event_date,
-      description: e.description, source_url: sourceUrl,
+      description: e.description, source_url: e.source_url || fallbackUrl,
       image_url: e.image_url || null, raw_text: 'add-place-cli'
     }]);
     if (!ins.error) { console.log('  saved: ' + e.title); saved++; }
@@ -407,27 +306,24 @@ async function saveEvents(placeId, events, fallbackUrl) {
 
 async function main() {
   console.log('\nAdding: ' + name + ' | ' + inputUrl + ' | ' + city);
-
-  const platform = detectPlatform(inputUrl);
+  var platform = detectPlatform(inputUrl);
   console.log('Platform: ' + platform);
 
-  // Save place
   var existing = await supabase.from('places').select('id').eq('name', name).limit(1);
   var placeId;
   if (existing.data && existing.data.length > 0) {
     placeId = existing.data[0].id;
     console.log('Place exists (id: ' + placeId + ')');
   } else {
-    var result = await supabase.from('places').insert([{ name, city, status: 'active', added_by: 'cli' }]).select();
-    if (result.error) { console.log('Failed: ' + result.error.message); process.exit(1); }
-    placeId = result.data[0].id;
+    var r = await supabase.from('places').insert([{ name, city, status: 'active', added_by: 'cli' }]).select();
+    if (r.error) { console.log('Failed: ' + r.error.message); process.exit(1); }
+    placeId = r.data[0].id;
     console.log('Place created (id: ' + placeId + ')');
   }
 
   await supabase.from('sources').insert([{ place_id: placeId, type: platform, url_or_handle: inputUrl, active: platform === 'website' }]);
 
-  // Find profiles
-  const profiles = await findAllProfiles(name, inputUrl, platform);
+  var profiles = await findAllProfiles(name, inputUrl, platform);
   for (var p of ['website', 'instagram', 'facebook', 'telegram']) {
     if (profiles[p] && profiles[p] !== inputUrl) {
       await supabase.from('sources').insert([{ place_id: placeId, type: p, url_or_handle: profiles[p], active: p === 'website' }]);
@@ -436,18 +332,12 @@ async function main() {
   }
 
   var totalSaved = 0;
-
-  // Scrape website
   if (profiles.website) {
-    const browser = await puppeteer.launch({ headless: true, args: ['--ignore-certificate-errors', '--no-sandbox'] });
-    totalSaved += await scrapeWebsite(browser, profiles.website, name, placeId);
-    await browser.close();
+    totalSaved += await scrapeWebsite(profiles.website, name, placeId);
   }
-
-  // Web search fallback
   if (totalSaved === 0) {
-    const searchEvents = await searchForEvents(name, profiles);
-    if (searchEvents.length > 0) totalSaved += await saveEvents(placeId, searchEvents, inputUrl);
+    var events = await searchForEvents(name);
+    if (events.length > 0) totalSaved += await saveEvents(placeId, events, inputUrl);
   }
 
   console.log('\nDone! Saved: ' + totalSaved + ' events');

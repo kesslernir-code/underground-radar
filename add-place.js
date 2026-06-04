@@ -194,12 +194,13 @@ async function scrapeWebsite(url, venueName, placeId) {
         }
         console.log('');
         var saved = await saveEvents(placeId, events, url);
-        if (saved > 0) return saved;
+        // Don't return — let Strategy B run to enrich images
       }
     }
   } catch(e) { console.log('  [A] Failed: ' + e.message.slice(0, 80)); }
 
   // STRATEGY B: Puppeteer with response interception
+  // Runs ALWAYS to enrich images even if A saved events
   // Works for: heavily JS-rendered sites where Node.js fetch returns minimal content
   // Key: intercept images as Chrome loads them natively — no hotlink protection possible
   try {
@@ -262,7 +263,30 @@ async function scrapeWebsite(url, venueName, placeId) {
       }
     }
     console.log('');
-    return await saveEvents(placeId, events2, url);
+    // Enrich existing events that have no image
+    var { data: existingNoImg } = await supabase.from('events').select('id,title').eq('place_id', placeId).is('image_url', null);
+    if (existingNoImg && existingNoImg.length > 0) {
+      console.log('  [B] Enriching ' + existingNoImg.length + ' events without images...');
+      for (var k = 0; k < Math.min(existingNoImg.length, pageImgs.length); k++) {
+        var ev = existingNoImg[k];
+        // Find best matching image by index (each event gets one intercepted image)
+        var imgKey = pageImgs[k % pageImgs.length];
+        var buf3 = intercepted[imgKey];
+        if (buf3) {
+          var ext3 = ((imgKey.match(/\.(jpg|jpeg|png|webp|gif)/i) || [])[1] || 'jpg').toLowerCase();
+          var uploadedUrl = await uploadImage(buf3, placeId, ext3);
+          if (uploadedUrl) {
+            await supabase.from('events').update({ image_url: uploadedUrl }).eq('id', ev.id);
+            process.stdout.write('✓');
+          } else process.stdout.write('·');
+        }
+        await new Promise(r => setTimeout(r, 100));
+      }
+      console.log('');
+    }
+    // Also save any NEW events found by B that A missed
+    var bSaved = await saveEvents(placeId, events2, url);
+    return bSaved;
   } catch(e) { console.log('  [B] Failed: ' + e.message.slice(0, 80)); }
 
   return 0;

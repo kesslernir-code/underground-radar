@@ -186,6 +186,31 @@ async function discoverEventUrls(websiteUrl) {
         seen2[clean] = true;
         return url.includes('?sd=') || clean.match(/\/events?\/[a-z0-9%\-_]{3,}\/?$/i) || clean.includes('/\u05d0\u05d9\u05e8\u05d5\u05e2\u05d9\u05dd/');
       });
+      // Fallback 3: Claude reads all page links and identifies event pages semantically
+      if (puppLinks && puppLinks.length > 0) {
+        console.log('  Puppeteer found ' + puppLinks.length + ' links — asking Claude to identify event pages...');
+        try {
+          var msg3 = await anthropic.messages.create({
+            model: 'claude-sonnet-4-5', max_tokens: 1024,
+            messages: [{ role: 'user', content:
+              'From these URLs from ' + websiteUrl + ', identify ONLY individual event/show/performance pages.\n' +
+              'NOT: homepage, nav links, about, contact, categories, listing pages.\n' +
+              'YES: specific event pages with a show/performance name.\n' +
+              'URLs:\n' + puppLinks.slice(0, 150).join('\n') + '\n\n' +
+              'Return ONLY a JSON array: ["url1","url2"]\nIf none found: []'
+            }]
+          });
+          var tb3 = msg3.content.find(b => b.type === 'text');
+          if (tb3) {
+            var claudeLinks = extractJSON(tb3.text);
+            if (claudeLinks.length > 0) {
+              console.log('  Claude identified ' + claudeLinks.length + ' event URLs');
+              return claudeLinks;
+            }
+          }
+        } catch(ce) { console.log('  Claude fallback failed: ' + ce.message.slice(0, 60)); }
+      }
+      return [];
     } catch(pe) {
       await browser2.close();
       console.log('  Puppeteer fallback failed: ' + pe.message.slice(0, 60));

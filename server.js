@@ -329,10 +329,96 @@ const server = http.createServer(async function(req, res) {
     return;
   }
 
+  // Serve the task manager
+  if (req.method === 'GET' && (req.url === '/tasks' || req.url === '/tasks/')) {
+    fs.readFile(path.join(__dirname, 'tasks.html'), function(err, data) {
+      if (err) { res.writeHead(500); res.end('Error loading page'); return; }
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(data);
+    });
+    return;
+  }
+
   // Redirect root to /kessler-time
   if (req.method === 'GET' && req.url === '/') {
     res.writeHead(302, { 'Location': '/kessler-time' });
     res.end();
+    return;
+  }
+
+  // GET /api/tasks
+  if (req.method === 'GET' && req.url === '/api/tasks') {
+    res.setHeader('Content-Type', 'application/json');
+    supabase.from('tasks').select('*').order('created_at', { ascending: false }).then(function(result) {
+      if (result.error) { res.writeHead(500); res.end(JSON.stringify({ error: result.error.message })); return; }
+      res.writeHead(200);
+      res.end(JSON.stringify(result.data));
+    });
+    return;
+  }
+
+  // POST /api/tasks
+  if (req.method === 'POST' && req.url === '/api/tasks') {
+    var body = '';
+    req.on('data', function(chunk) { body += chunk; });
+    req.on('end', async function() {
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        var parsed = JSON.parse(body);
+        if (!parsed.title) { res.writeHead(400); res.end(JSON.stringify({ error: 'title required' })); return; }
+        var result = await supabase.from('tasks').insert([{
+          title: parsed.title,
+          description: parsed.description || null,
+          priority: parsed.priority || 'medium',
+          due_date: parsed.due_date || null,
+          status: 'todo'
+        }]).select().single();
+        if (result.error) { res.writeHead(500); res.end(JSON.stringify({ error: result.error.message })); return; }
+        res.writeHead(201);
+        res.end(JSON.stringify(result.data));
+      } catch(e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'invalid request' }));
+      }
+    });
+    return;
+  }
+
+  // PATCH /api/tasks/:id
+  var patchMatch = req.url.match(/^\/api\/tasks\/([^/]+)$/);
+  if (req.method === 'PATCH' && patchMatch) {
+    var taskId = patchMatch[1];
+    var body = '';
+    req.on('data', function(chunk) { body += chunk; });
+    req.on('end', async function() {
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        var parsed = JSON.parse(body);
+        var allowed = ['status', 'title', 'description', 'priority', 'due_date'];
+        var updates = {};
+        allowed.forEach(function(k) { if (parsed[k] !== undefined) updates[k] = parsed[k]; });
+        var result = await supabase.from('tasks').update(updates).eq('id', taskId).select().single();
+        if (result.error) { res.writeHead(500); res.end(JSON.stringify({ error: result.error.message })); return; }
+        res.writeHead(200);
+        res.end(JSON.stringify(result.data));
+      } catch(e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'invalid request' }));
+      }
+    });
+    return;
+  }
+
+  // DELETE /api/tasks/:id
+  var deleteMatch = req.url.match(/^\/api\/tasks\/([^/]+)$/);
+  if (req.method === 'DELETE' && deleteMatch) {
+    var taskId = deleteMatch[1];
+    res.setHeader('Content-Type', 'application/json');
+    supabase.from('tasks').delete().eq('id', taskId).then(function(result) {
+      if (result.error) { res.writeHead(500); res.end(JSON.stringify({ error: result.error.message })); return; }
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true }));
+    });
     return;
   }
 

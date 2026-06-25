@@ -33,8 +33,6 @@
       min-height: 100vh;
       padding: 40px 24px 80px;
     }
-
-    /* Header */
     header {
       max-width: 1040px;
       margin: 0 auto 36px;
@@ -53,8 +51,6 @@
     }
     header h1 { font-size: 24px; font-weight: 200; color: var(--text-primary); line-height: 1.1; }
     header h1 span { color: var(--accent); }
-
-    /* App layout */
     .app {
       max-width: 1040px;
       margin: 0 auto;
@@ -62,8 +58,6 @@
       gap: 24px;
       align-items: flex-start;
     }
-
-    /* Sidebar — projects (right side in RTL) */
     .sidebar {
       width: 200px;
       flex-shrink: 0;
@@ -84,76 +78,40 @@
       color: var(--text-muted);
     }
     .proj-add-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 20px;
-      line-height: 1;
-      padding: 0 4px;
+      background: transparent; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 20px; line-height: 1; padding: 0 4px;
       transition: color 0.15s;
     }
     .proj-add-btn:hover { color: var(--accent); }
     .proj-list { display: flex; flex-direction: column; gap: 2px; }
     .proj-item {
-      background: transparent;
-      border: none;
-      border-radius: 6px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      font-size: 13px;
-      padding: 8px 12px;
-      text-align: right;
-      transition: all 0.15s;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      width: 100%;
+      background: transparent; border: none; border-radius: 6px;
+      color: var(--text-secondary); cursor: pointer; font-size: 13px;
+      padding: 8px 12px; text-align: right; transition: all 0.15s;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; width: 100%;
     }
     .proj-item:hover { background: var(--surface); color: var(--text-primary); }
     .proj-item.active { background: var(--surface); color: var(--accent); }
     .proj-item-name { flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .proj-del {
-      display: none;
-      color: var(--text-muted);
-      font-size: 10px;
-      flex-shrink: 0;
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 0 2px;
-      line-height: 1;
+      display: none; color: var(--text-muted); font-size: 10px; flex-shrink: 0;
+      background: none; border: none; cursor: pointer; padding: 0 2px; line-height: 1;
     }
     .proj-item:hover .proj-del { display: block; }
     .proj-del:hover { color: var(--red) !important; }
-
-    /* Main content (left side in RTL) */
     .main { flex: 1; min-width: 0; }
-
-    /* Add form */
     .add-form {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 18px;
-      margin-bottom: 24px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 18px; margin-bottom: 24px;
     }
     .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
     .form-row:last-child { margin-bottom: 0; }
     input, textarea, select {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text-primary);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      font-weight: 300;
-      padding: 9px 13px;
-      outline: none;
-      transition: border-color 0.15s;
-      width: 100%;
-      text-align: right;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text-primary); font-family: 'DM Sans', sans-serif;
+      font-size: 14px; font-weight: 300; padding: 9px 13px;
+      outline: none; transition: border-color 0.15s; width: 100%; text-align: right;
     }
     input::placeholder, textarea::placeholder { color: var(--text-muted); }
     input:focus, textarea:focus, select:focus { border-color: var(--border-hover); }
@@ -161,31 +119,18 @@
     select { direction: rtl; }
     select option { background: #1a1a1a; }
     .form-row input.title-input { flex: 1; }
-
-    /* Date widget */
     .date-wrap { position: relative; flex-shrink: 0; }
     .date-wrap input[type="date"] {
       position: absolute; inset: 0; opacity: 0;
-      cursor: pointer; width: 100%; height: 100%; z-index: 2;
-      color-scheme: dark;
+      cursor: pointer; width: 100%; height: 100%; z-index: 2; color-scheme: dark;
     }
     .date-display {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text-muted);
-      font-size: 13px;
-      padding: 9px 13px;
-      white-space: nowrap;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      min-width: 140px;
-      user-select: none;
-      cursor: pointer;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text-muted); font-size: 13px; padding: 9px 13px;
+      white-space: nowrap; display: flex; align-items: center; gap: 6px;
+      min-width: 140px; user-select: none; cursor: pointer;
     }
     .date-display.has-date { color: var(--text-primary); border-color: var(--border-hover); }
-
     .btn {
       background: var(--accent); border: none; border-radius: 6px;
       color: #000; cursor: pointer; font-size: 13px; font-weight: 500;
@@ -198,8 +143,6 @@
       padding: 9px 14px; transition: all 0.15s; white-space: nowrap;
     }
     .btn-ghost:hover { border-color: var(--border-hover); color: var(--text-primary); }
-
-    /* Filters */
     .filters { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
     .filter-btn {
       background: transparent; border: 1px solid var(--border); border-radius: 20px;
@@ -208,8 +151,6 @@
     }
     .filter-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
     .filter-btn.active { border-color: var(--accent); color: var(--accent); }
-
-    /* Task list */
     .section-label {
       font-size: 10px; color: var(--text-muted); margin-bottom: 10px;
       display: flex; align-items: center; gap: 8px;
@@ -222,14 +163,12 @@
     .task-item {
       background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
       padding: 12px 14px; margin-bottom: 6px;
-      display: flex; align-items: flex-start; gap: 10px;
-      transition: border-color 0.15s;
+      display: flex; align-items: flex-start; gap: 10px; transition: border-color 0.15s;
     }
     .task-item:hover { border-color: var(--border-hover); }
     .task-item.done { opacity: 0.4; }
     .checkbox {
-      width: 17px; height: 17px;
-      border: 1.5px solid var(--border-hover);
+      width: 17px; height: 17px; border: 1.5px solid var(--border-hover);
       border-radius: 4px; flex-shrink: 0; margin-top: 2px;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
       transition: all 0.15s;
@@ -254,7 +193,7 @@
     .tag.project { color: var(--accent); border-color: rgba(200,255,0,0.2); }
     .tag.cal {
       color: #4285f4; border-color: rgba(66,133,244,0.3);
-      cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 3px;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 3px;
     }
     .tag.cal:hover { background: rgba(66,133,244,0.1); }
     .task-actions { flex-shrink: 0; }
@@ -265,8 +204,6 @@
     }
     .icon-btn:hover { color: var(--red); }
     .empty { text-align: center; padding: 40px 0; color: var(--text-muted); font-size: 13px; }
-
-    /* Modal */
     .modal-overlay {
       display: none; position: fixed; inset: 0;
       background: rgba(0,0,0,0.7); z-index: 200;
@@ -280,18 +217,44 @@
     .modal h2 { font-size: 14px; font-weight: 400; margin-bottom: 14px; }
     .modal-row { display: flex; gap: 8px; }
 
-    /* Toast */
+    /* Toast with optional action link */
     .toast {
       position: fixed; bottom: 24px; left: 24px;
       background: var(--surface2); border: 1px solid var(--border-hover);
-      border-radius: 8px; color: var(--text-primary); font-size: 13px;
-      padding: 12px 16px; opacity: 0; pointer-events: none;
+      border-radius: 10px; color: var(--text-primary); font-size: 13px;
+      padding: 14px 16px; opacity: 0; pointer-events: none;
       transform: translateY(8px); transition: all 0.2s; z-index: 100;
+      min-width: 200px;
     }
     .toast.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
-    .loading { color: var(--text-muted); font-size: 13px; padding: 20px 0; }
+    .toast-msg { margin-bottom: 0; }
+    .toast-action {
+      display: none;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .toast-action.visible { display: block; }
+    .toast-cal-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #4285f4;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      padding: 7px 14px;
+      cursor: pointer;
+      text-decoration: none;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 400;
+      width: 100%;
+      justify-content: center;
+    }
+    .toast-cal-btn:hover { opacity: 0.9; }
 
-    /* Responsive */
+    .loading { color: var(--text-muted); font-size: 13px; padding: 20px 0; }
     @media (max-width: 620px) {
       .app { flex-direction: column; }
       .sidebar { width: 100%; position: static; }
@@ -301,6 +264,7 @@
       .date-wrap { width: 100%; }
       .date-display { min-width: unset; }
       body { padding: 24px 16px 60px; }
+      .toast { left: 16px; right: 16px; bottom: 16px; }
     }
   </style>
 </head>
@@ -320,7 +284,6 @@
   </header>
 
   <div class="app">
-    <!-- Sidebar: projects (right in RTL) -->
     <aside class="sidebar">
       <div class="sidebar-header">
         <button class="proj-add-btn" onclick="openAddProject()" title="פרויקט חדש">+</button>
@@ -329,7 +292,6 @@
       <div class="proj-list" id="projList"></div>
     </aside>
 
-    <!-- Main: tasks (left in RTL) -->
     <div class="main">
       <div class="add-form">
         <div class="form-row">
@@ -366,7 +328,6 @@
     </div>
   </div>
 
-  <!-- Add project modal -->
   <div class="modal-overlay" id="modalOverlay" onclick="closeAddProject(event)">
     <div class="modal">
       <h2>פרויקט חדש</h2>
@@ -378,18 +339,25 @@
     </div>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <!-- Toast with calendar action -->
+  <div class="toast" id="toast">
+    <div class="toast-msg" id="toastMsg"></div>
+    <div class="toast-action" id="toastAction">
+      <a class="toast-cal-btn" id="toastCalBtn" href="#" target="_blank" rel="noopener">
+        📆 הוסף ליומן Google
+      </a>
+    </div>
+  </div>
 
   <script>
     var tasks = [], projects = [], filter = 'all', currentProject = 'all';
+    var toastTimer = null;
 
     function gcalUrl(title, date, desc) {
       var d = date.replace(/-/g, '');
-      var start = d + 'T080000';
-      var end   = d + 'T090000';
       return 'https://calendar.google.com/calendar/render?action=TEMPLATE'
         + '&text=' + encodeURIComponent(title)
-        + '&dates=' + start + '/' + end
+        + '&dates=' + d + 'T080000/' + d + 'T090000'
         + (desc ? '&details=' + encodeURIComponent(desc) : '')
         + '&sf=true';
     }
@@ -405,6 +373,22 @@
         lbl.textContent = 'תאריך יעד';
         disp.classList.remove('has-date');
       }
+    }
+
+    function toast(msg, calUrl) {
+      if (toastTimer) clearTimeout(toastTimer);
+      var el = document.getElementById('toast');
+      document.getElementById('toastMsg').textContent = msg;
+      var action = document.getElementById('toastAction');
+      var calBtn = document.getElementById('toastCalBtn');
+      if (calUrl) {
+        calBtn.href = calUrl;
+        action.classList.add('visible');
+      } else {
+        action.classList.remove('visible');
+      }
+      el.classList.add('show');
+      toastTimer = setTimeout(function() { el.classList.remove('show'); }, calUrl ? 6000 : 2400);
     }
 
     async function load() {
@@ -424,27 +408,22 @@
     function renderSidebar() {
       var list = document.getElementById('projList');
       list.innerHTML = '';
-      // All
       var all = document.createElement('button');
       all.className = 'proj-item' + (currentProject === 'all' ? ' active' : '');
       all.setAttribute('data-id', 'all');
       all.innerHTML = '<span class="proj-item-name">הכל</span>';
       all.onclick = function() { selectProject('all', all); };
       list.appendChild(all);
-      // Projects
       projects.forEach(function(p) {
         var btn = document.createElement('button');
         btn.className = 'proj-item' + (currentProject === p.id ? ' active' : '');
         btn.setAttribute('data-id', p.id);
         var del = document.createElement('button');
-        del.className = 'proj-del';
-        del.textContent = '✕';
+        del.className = 'proj-del'; del.textContent = '✕';
         del.onclick = function(e) { e.stopPropagation(); deleteProject(p.id); };
         var name = document.createElement('span');
-        name.className = 'proj-item-name';
-        name.textContent = p.name;
-        btn.appendChild(del);
-        btn.appendChild(name);
+        name.className = 'proj-item-name'; name.textContent = p.name;
+        btn.appendChild(del); btn.appendChild(name);
         btn.onclick = function() { selectProject(p.id, btn); };
         list.appendChild(btn);
       });
@@ -452,11 +431,10 @@
 
     function selectProject(id, btn) {
       currentProject = id;
-      document.querySelectorAll('.proj-item').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelectorAll('.proj-item').forEach(function(b){b.classList.remove('active');});
       btn.classList.add('active');
       loadTasks();
     }
-
     async function loadTasks() {
       try {
         var url = '/api/tasks' + (currentProject !== 'all' ? '?project_id=' + currentProject : '');
@@ -469,7 +447,7 @@
 
     function openAddProject() {
       document.getElementById('modalOverlay').classList.add('open');
-      setTimeout(function() { document.getElementById('projNameInput').focus(); }, 50);
+      setTimeout(function(){document.getElementById('projNameInput').focus();},50);
     }
     function closeAddProject(e) {
       if (e && e.target !== document.getElementById('modalOverlay')) return;
@@ -480,155 +458,125 @@
       var name = document.getElementById('projNameInput').value.trim();
       if (!name) { toast('הכנס שם פרויקט'); return; }
       try {
-        var res = await fetch('/api/projects', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name:name}) });
+        var res = await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name})});
         var proj = await res.json();
         if (proj.error) throw new Error(proj.error);
         projects.push(proj);
         document.getElementById('modalOverlay').classList.remove('open');
         document.getElementById('projNameInput').value = '';
         renderSidebar();
-        var newBtn = document.querySelector('[data-id="' + proj.id + '"]');
+        var newBtn = document.querySelector('[data-id="'+proj.id+'"]');
         if (newBtn) selectProject(proj.id, newBtn);
         toast('פרויקט נוצר');
-      } catch(e) { toast('שגיאה: ' + e.message); }
+      } catch(e) { toast('שגיאה: '+e.message); }
     }
     async function deleteProject(id) {
       if (!confirm('למחוק פרויקט זה?')) return;
       try {
-        await fetch('/api/projects/' + id, {method:'DELETE'});
+        await fetch('/api/projects/'+id,{method:'DELETE'});
         projects = projects.filter(function(p){return p.id!==id;});
-        if (currentProject === id) currentProject = 'all';
-        renderSidebar();
-        loadTasks();
+        if (currentProject===id) currentProject='all';
+        renderSidebar(); loadTasks();
         toast('פרויקט נמחק');
       } catch(e) { toast('שגיאה'); }
     }
 
-    function setFilter(f, btn) {
-      filter = f;
+    function setFilter(f,btn) {
+      filter=f;
       document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active');});
-      btn.classList.add('active');
-      render();
+      btn.classList.add('active'); render();
     }
     function filtered() {
-      return tasks.filter(function(t) {
-        if (filter==='active') return t.status!=='done';
-        if (filter==='done') return t.status==='done';
-        if (filter==='high') return t.priority==='high' && t.status!=='done';
+      return tasks.filter(function(t){
+        if(filter==='active') return t.status!=='done';
+        if(filter==='done') return t.status==='done';
+        if(filter==='high') return t.priority==='high'&&t.status!=='done';
         return true;
       });
     }
     function fmtDate(d) {
-      if (!d) return null;
-      var p = d.split('T')[0].split('-');
+      if(!d) return null;
+      var p=d.split('T')[0].split('-');
       return p[2]+'/'+p[1]+'/'+p[0].slice(2);
     }
     function overdue(t) {
-      if (!t.due_date || t.status==='done') return false;
-      return new Date(t.due_date) < new Date(new Date().toDateString());
+      if(!t.due_date||t.status==='done') return false;
+      return new Date(t.due_date)<new Date(new Date().toDateString());
     }
-    function esc(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-    function projectName(pid) {
-      if (!pid) return null;
-      var p = projects.find(function(x){return x.id===pid;});
-      return p ? p.name : null;
+    function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+    function projectName(pid){
+      if(!pid) return null;
+      var p=projects.find(function(x){return x.id===pid;});
+      return p?p.name:null;
     }
     function render() {
-      var list = filtered();
-      var active = list.filter(function(t){return t.status!=='done';});
-      var done = list.filter(function(t){return t.status==='done';});
-      var html = '';
-      if (!active.length && !done.length) {
-        html = '<div class="empty">אין משימות</div>';
-      } else {
-        if (active.length) html += group('ממתין', active);
-        if (done.length) html += group('הושלם', done);
-      }
-      document.getElementById('taskList').innerHTML = html;
+      var list=filtered();
+      var active=list.filter(function(t){return t.status!=='done';});
+      var done=list.filter(function(t){return t.status==='done';});
+      var html='';
+      if(!active.length&&!done.length){html='<div class="empty">אין משימות</div>';}
+      else{if(active.length)html+=group('ממתין',active);if(done.length)html+=group('הושלם',done);}
+      document.getElementById('taskList').innerHTML=html;
     }
-    function group(label, items) {
-      var h = '<div class="task-group">';
-      h += '<div class="section-label">'+label+' <span class="count">'+items.length+'</span></div>';
-      items.forEach(function(t) {
-        var isDone = t.status==='done';
-        var od = overdue(t);
-        var pname = currentProject==='all' ? projectName(t.project_id) : null;
-        var dateStr = t.due_date ? t.due_date.split('T')[0] : null;
-        h += '<div class="task-item'+(isDone?' done':'')+'">'
-          + '<div class="task-actions"><button class="icon-btn" onclick="del(\''+t.id+'\')" title="מחק">✕</button></div>'
-          + '<div class="task-body">'
-          + '<div class="task-title">'+esc(t.title)+'</div>'
-          + (t.description ? '<div class="task-desc">'+esc(t.description)+'</div>' : '')
-          + '<div class="task-meta">';
-        if (t.priority==='high') h += '<span class="tag high">גבוהה</span>';
-        if (t.priority==='low') h += '<span class="tag low">נמוכה</span>';
-        if (dateStr) {
-          h += '<span class="tag '+(od?'overdue':'due')+'">'+(od?'באיחור · ':'')+fmtDate(dateStr)+'</span>';
-          if (!isDone) h += '<a class="tag cal" href="'+gcalUrl(t.title, dateStr, t.description)+'" target="_blank" rel="noopener">📆 יומן</a>';
+    function group(label,items){
+      var h='<div class="task-group"><div class="section-label">'+label+' <span class="count">'+items.length+'</span></div>';
+      items.forEach(function(t){
+        var isDone=t.status==='done', od=overdue(t);
+        var pname=currentProject==='all'?projectName(t.project_id):null;
+        var dateStr=t.due_date?t.due_date.split('T')[0]:null;
+        h+='<div class="task-item'+(isDone?' done':'')+'">';
+        h+='<div class="task-actions"><button class="icon-btn" onclick="del(\''+t.id+'\')" title="מחק">✕</button></div>';
+        h+='<div class="task-body"><div class="task-title">'+esc(t.title)+'</div>';
+        if(t.description) h+='<div class="task-desc">'+esc(t.description)+'</div>';
+        h+='<div class="task-meta">';
+        if(t.priority==='high') h+='<span class="tag high">גבוהה</span>';
+        if(t.priority==='low') h+='<span class="tag low">נמוכה</span>';
+        if(dateStr){
+          h+='<span class="tag '+(od?'overdue':'due')+'">'+(od?'באיחור · ':'')+fmtDate(dateStr)+'</span>';
+          if(!isDone) h+='<a class="tag cal" href="'+gcalUrl(t.title,dateStr,t.description)+'" target="_blank" rel="noopener">📆 יומן</a>';
         }
-        if (pname) h += '<span class="tag project">'+esc(pname)+'</span>';
-        h += '</div></div>'
-          + '<div class="checkbox'+(isDone?' checked':'')+'" onclick="toggle(\''+t.id+'\',' +isDone+')"></div>'
-          + '</div>';
+        if(pname) h+='<span class="tag project">'+esc(pname)+'</span>';
+        h+='</div></div><div class="checkbox'+(isDone?' checked':'')+'" onclick="toggle(\''+t.id+'\',' +isDone+')"></div></div>';
       });
-      return h + '</div>';
+      return h+'</div>';
     }
     async function addTask() {
-      var title = document.getElementById('titleInput').value.trim();
-      if (!title) { toast('הכנס כותרת משימה'); return; }
-      var dueDate = document.getElementById('dueDateInput').value;
-      var payload = {
-        title: title,
-        description: document.getElementById('descInput').value.trim() || null,
-        priority: document.getElementById('priorityInput').value,
-        due_date: dueDate || null,
-        project_id: currentProject !== 'all' ? currentProject : null
-      };
-      try {
-        var res = await fetch('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
-        var task = await res.json();
-        if (task.error) throw new Error(task.error);
+      var title=document.getElementById('titleInput').value.trim();
+      if(!title){toast('הכנס כותרת משימה');return;}
+      var dueDate=document.getElementById('dueDateInput').value;
+      var desc=document.getElementById('descInput').value.trim()||null;
+      var payload={title:title,description:desc,priority:document.getElementById('priorityInput').value,due_date:dueDate||null,project_id:currentProject!=='all'?currentProject:null};
+      try{
+        var res=await fetch('/api/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        var task=await res.json();
+        if(task.error) throw new Error(task.error);
         tasks.unshift(task);
-        document.getElementById('titleInput').value = '';
-        document.getElementById('descInput').value = '';
-        document.getElementById('dueDateInput').value = '';
-        document.getElementById('priorityInput').value = 'normal';
+        document.getElementById('titleInput').value='';
+        document.getElementById('descInput').value='';
+        document.getElementById('dueDateInput').value='';
+        document.getElementById('priorityInput').value='normal';
         onDateChange(document.getElementById('dueDateInput'));
         render();
-        toast('משימה נוספה');
-        if (dueDate) {
-          setTimeout(function() {
-            window.open(gcalUrl(title, dueDate, payload.description), '_blank', 'noopener');
-          }, 400);
-        }
-      } catch(e) { toast('שגיאה: ' + e.message); }
+        toast('משימה נוספה', dueDate ? gcalUrl(title, dueDate, desc) : null);
+      }catch(e){toast('שגיאה: '+e.message);}
     }
-    async function toggle(id, wasDone) {
-      try {
-        var res = await fetch('/api/tasks/'+id, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:wasDone?'todo':'done'})});
-        var updated = await res.json();
-        tasks = tasks.map(function(t){return t.id===id?updated:t;});
+    async function toggle(id,wasDone){
+      try{
+        var res=await fetch('/api/tasks/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:wasDone?'todo':'done'})});
+        var updated=await res.json();
+        tasks=tasks.map(function(t){return t.id===id?updated:t;});
         render();
-      } catch(e) { toast('שגיאה'); }
+      }catch(e){toast('שגיאה');}
     }
-    async function del(id) {
-      try {
-        await fetch('/api/tasks/'+id, {method:'DELETE'});
-        tasks = tasks.filter(function(t){return t.id!==id;});
-        render();
-        toast('נמחק');
-      } catch(e) { toast('שגיאה'); }
+    async function del(id){
+      try{
+        await fetch('/api/tasks/'+id,{method:'DELETE'});
+        tasks=tasks.filter(function(t){return t.id!==id;});
+        render(); toast('נמחק');
+      }catch(e){toast('שגיאה');}
     }
-    function toast(msg) {
-      var el = document.getElementById('toast');
-      el.textContent = msg;
-      el.classList.add('show');
-      setTimeout(function(){el.classList.remove('show');}, 2400);
-    }
-    document.getElementById('titleInput').addEventListener('keydown', function(e){if(e.key==='Enter')addTask();});
-    document.getElementById('projNameInput').addEventListener('keydown', function(e){
+    document.getElementById('titleInput').addEventListener('keydown',function(e){if(e.key==='Enter')addTask();});
+    document.getElementById('projNameInput').addEventListener('keydown',function(e){
       if(e.key==='Enter')addProject();
       if(e.key==='Escape')closeAddProject();
     });

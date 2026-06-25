@@ -14,257 +14,103 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg: #0a0a0a;
-      --surface: #111111;
-      --surface2: #161616;
-      --border: #1c1c1c;
-      --border-hover: #2e2e2e;
-      --text-primary: #e8e8e8;
-      --text-secondary: #888;
-      --text-muted: #444;
-      --accent: #c8ff00;
-      --red: #ff4d4d;
+      --bg: #0a0a0a; --surface: #111111; --surface2: #161616;
+      --border: #1c1c1c; --border-hover: #2e2e2e;
+      --text-primary: #e8e8e8; --text-secondary: #888; --text-muted: #444;
+      --accent: #c8ff00; --red: #ff4d4d;
     }
-    body {
-      background: var(--bg);
-      color: var(--text-primary);
-      font-family: 'DM Sans', sans-serif;
-      font-weight: 300;
-      min-height: 100vh;
-      padding: 40px 24px 80px;
-    }
-    header {
-      max-width: 1040px;
-      margin: 0 auto 36px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-    .logo { width: 40px; height: 40px; flex-shrink: 0; }
-    .header-label {
-      font-family: 'DM Mono', monospace;
-      font-size: 10px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      margin-bottom: 2px;
-    }
-    header h1 { font-size: 24px; font-weight: 200; color: var(--text-primary); line-height: 1.1; }
-    header h1 span { color: var(--accent); }
-    .app {
-      max-width: 1040px;
-      margin: 0 auto;
-      display: flex;
-      gap: 24px;
-      align-items: flex-start;
-    }
-    .sidebar {
-      width: 200px;
-      flex-shrink: 0;
-      position: sticky;
-      top: 24px;
-    }
-    .sidebar-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }
-    .sidebar-label {
-      font-size: 10px;
-      font-family: 'DM Mono', monospace;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-    }
-    .proj-add-btn {
-      background: transparent; border: none; color: var(--text-muted);
-      cursor: pointer; font-size: 20px; line-height: 1; padding: 0 4px;
-      transition: color 0.15s;
-    }
-    .proj-add-btn:hover { color: var(--accent); }
-    .proj-list { display: flex; flex-direction: column; gap: 2px; }
-    .proj-item {
-      background: transparent; border: none; border-radius: 6px;
-      color: var(--text-secondary); cursor: pointer; font-size: 13px;
-      padding: 8px 12px; text-align: right; transition: all 0.15s;
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 8px; width: 100%;
-    }
-    .proj-item:hover { background: var(--surface); color: var(--text-primary); }
-    .proj-item.active { background: var(--surface); color: var(--accent); }
-    .proj-item-name { flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .proj-del {
-      display: none; color: var(--text-muted); font-size: 10px; flex-shrink: 0;
-      background: none; border: none; cursor: pointer; padding: 0 2px; line-height: 1;
-    }
-    .proj-item:hover .proj-del { display: block; }
-    .proj-del:hover { color: var(--red) !important; }
-    .main { flex: 1; min-width: 0; }
-    .add-form {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 8px; padding: 18px; margin-bottom: 24px;
-    }
-    .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
-    .form-row:last-child { margin-bottom: 0; }
-    input, textarea, select {
-      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-      color: var(--text-primary); font-family: 'DM Sans', sans-serif;
-      font-size: 14px; font-weight: 300; padding: 9px 13px;
-      outline: none; transition: border-color 0.15s; width: 100%; text-align: right;
-    }
-    input::placeholder, textarea::placeholder { color: var(--text-muted); }
-    input:focus, textarea:focus, select:focus { border-color: var(--border-hover); }
-    textarea { resize: vertical; min-height: 56px; }
-    select { direction: rtl; }
-    select option { background: #1a1a1a; }
-    .form-row input.title-input { flex: 1; }
-    .date-wrap { position: relative; flex-shrink: 0; }
-    .date-wrap input[type="date"] {
-      position: absolute; inset: 0; opacity: 0;
-      cursor: pointer; width: 100%; height: 100%; z-index: 2; color-scheme: dark;
-    }
-    .date-display {
-      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-      color: var(--text-muted); font-size: 13px; padding: 9px 13px;
-      white-space: nowrap; display: flex; align-items: center; gap: 6px;
-      min-width: 140px; user-select: none; cursor: pointer;
-    }
-    .date-display.has-date { color: var(--text-primary); border-color: var(--border-hover); }
-    .btn {
-      background: var(--accent); border: none; border-radius: 6px;
-      color: #000; cursor: pointer; font-size: 13px; font-weight: 500;
-      padding: 9px 18px; transition: opacity 0.15s; white-space: nowrap;
-    }
-    .btn:hover { opacity: 0.85; }
-    .btn-ghost {
-      background: transparent; border: 1px solid var(--border); border-radius: 6px;
-      color: var(--text-secondary); cursor: pointer; font-size: 13px;
-      padding: 9px 14px; transition: all 0.15s; white-space: nowrap;
-    }
-    .btn-ghost:hover { border-color: var(--border-hover); color: var(--text-primary); }
-    .filters { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-    .filter-btn {
-      background: transparent; border: 1px solid var(--border); border-radius: 20px;
-      color: var(--text-secondary); cursor: pointer; font-size: 12px;
-      padding: 5px 13px; transition: all 0.15s;
-    }
-    .filter-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
-    .filter-btn.active { border-color: var(--accent); color: var(--accent); }
-    .section-label {
-      font-size: 10px; color: var(--text-muted); margin-bottom: 10px;
-      display: flex; align-items: center; gap: 8px;
-    }
-    .section-label .count {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; font-size: 9px; padding: 1px 6px; color: var(--text-secondary);
-    }
-    .task-group { margin-bottom: 28px; }
-    .task-item {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-      padding: 12px 14px; margin-bottom: 6px;
-      display: flex; align-items: flex-start; gap: 10px; transition: border-color 0.15s;
-    }
-    .task-item:hover { border-color: var(--border-hover); }
-    .task-item.done { opacity: 0.4; }
-    .checkbox {
-      width: 17px; height: 17px; border: 1.5px solid var(--border-hover);
-      border-radius: 4px; flex-shrink: 0; margin-top: 2px;
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-      transition: all 0.15s;
-    }
-    .checkbox:hover { border-color: var(--accent); }
-    .checkbox.checked { background: var(--accent); border-color: var(--accent); }
-    .checkbox.checked::after {
-      content: ''; width: 9px; height: 5px;
-      border-left: 2px solid #000; border-bottom: 2px solid #000;
-      transform: rotate(-45deg) translateY(-1px);
-    }
-    .task-body { flex: 1; min-width: 0; }
-    .task-title { font-size: 14px; font-weight: 400; color: var(--text-primary); line-height: 1.4; }
-    .task-item.done .task-title { text-decoration: line-through; color: var(--text-secondary); }
-    .task-desc { font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.5; }
-    .task-meta { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
-    .tag { font-size: 10px; padding: 2px 7px; border-radius: 10px; border: 1px solid; }
-    .tag.high { color: var(--red); border-color: rgba(255,77,77,0.3); }
-    .tag.low { color: var(--text-muted); border-color: var(--border); }
-    .tag.due { color: var(--text-secondary); border-color: var(--border); }
-    .tag.overdue { color: var(--red); border-color: rgba(255,77,77,0.3); }
-    .tag.project { color: var(--accent); border-color: rgba(200,255,0,0.2); }
-    .tag.cal {
-      color: #4285f4; border-color: rgba(66,133,244,0.3);
-      text-decoration: none; display: inline-flex; align-items: center; gap: 3px;
-    }
-    .tag.cal:hover { background: rgba(66,133,244,0.1); }
-    .task-actions { flex-shrink: 0; }
-    .icon-btn {
-      background: transparent; border: none; color: var(--text-muted);
-      cursor: pointer; font-size: 13px; padding: 3px; border-radius: 4px;
-      transition: color 0.15s; line-height: 1;
-    }
-    .icon-btn:hover { color: var(--red); }
-    .empty { text-align: center; padding: 40px 0; color: var(--text-muted); font-size: 13px; }
-    .modal-overlay {
-      display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,0.7); z-index: 200;
-      align-items: center; justify-content: center;
-    }
-    .modal-overlay.open { display: flex; }
-    .modal {
-      background: var(--surface); border: 1px solid var(--border-hover);
-      border-radius: 10px; padding: 24px; width: 300px; max-width: 90vw;
-    }
-    .modal h2 { font-size: 14px; font-weight: 400; margin-bottom: 14px; }
-    .modal-row { display: flex; gap: 8px; }
-
-    /* Toast with optional action link */
-    .toast {
-      position: fixed; bottom: 24px; left: 24px;
-      background: var(--surface2); border: 1px solid var(--border-hover);
-      border-radius: 10px; color: var(--text-primary); font-size: 13px;
-      padding: 14px 16px; opacity: 0; pointer-events: none;
-      transform: translateY(8px); transition: all 0.2s; z-index: 100;
-      min-width: 200px;
-    }
-    .toast.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
-    .toast-msg { margin-bottom: 0; }
-    .toast-action {
-      display: none;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid var(--border);
-    }
-    .toast-action.visible { display: block; }
-    .toast-cal-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: #4285f4;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      padding: 7px 14px;
-      cursor: pointer;
-      text-decoration: none;
-      font-family: 'DM Sans', sans-serif;
-      font-weight: 400;
-      width: 100%;
-      justify-content: center;
-    }
-    .toast-cal-btn:hover { opacity: 0.9; }
-
-    .loading { color: var(--text-muted); font-size: 13px; padding: 20px 0; }
-    @media (max-width: 620px) {
-      .app { flex-direction: column; }
-      .sidebar { width: 100%; position: static; }
-      .proj-list { flex-direction: row; flex-wrap: wrap; gap: 6px; }
-      .proj-item { width: auto; }
-      .form-row { flex-direction: column; }
-      .date-wrap { width: 100%; }
-      .date-display { min-width: unset; }
-      body { padding: 24px 16px 60px; }
-      .toast { left: 16px; right: 16px; bottom: 16px; }
+    body { background:var(--bg); color:var(--text-primary); font-family:'DM Sans',sans-serif; font-weight:300; min-height:100vh; padding:40px 24px 80px; }
+    header { max-width:1040px; margin:0 auto 36px; display:flex; align-items:center; gap:14px; }
+    .logo { width:40px; height:40px; flex-shrink:0; }
+    .header-label { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); margin-bottom:2px; }
+    header h1 { font-size:24px; font-weight:200; color:var(--text-primary); line-height:1.1; }
+    header h1 span { color:var(--accent); }
+    .app { max-width:1040px; margin:0 auto; display:flex; gap:24px; align-items:flex-start; }
+    .sidebar { width:200px; flex-shrink:0; position:sticky; top:24px; }
+    .sidebar-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .sidebar-label { font-size:10px; font-family:'DM Mono',monospace; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted); }
+    .proj-add-btn { background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:20px; line-height:1; padding:0 4px; transition:color 0.15s; }
+    .proj-add-btn:hover { color:var(--accent); }
+    .proj-list { display:flex; flex-direction:column; gap:2px; }
+    .proj-item { background:transparent; border:none; border-radius:6px; color:var(--text-secondary); cursor:pointer; font-size:13px; padding:8px 12px; text-align:right; transition:all 0.15s; display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; }
+    .proj-item:hover { background:var(--surface); color:var(--text-primary); }
+    .proj-item.active { background:var(--surface); color:var(--accent); }
+    .proj-item-name { flex:1; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .proj-del { display:none; color:var(--text-muted); font-size:10px; flex-shrink:0; background:none; border:none; cursor:pointer; padding:0 2px; line-height:1; }
+    .proj-item:hover .proj-del { display:block; }
+    .proj-del:hover { color:var(--red)!important; }
+    .main { flex:1; min-width:0; }
+    .add-form { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; margin-bottom:24px; }
+    .form-row { display:flex; gap:10px; margin-bottom:10px; }
+    .form-row:last-child { margin-bottom:0; }
+    input, textarea, select { background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-family:'DM Sans',sans-serif; font-size:14px; font-weight:300; padding:9px 13px; outline:none; transition:border-color 0.15s; width:100%; text-align:right; }
+    input::placeholder, textarea::placeholder { color:var(--text-muted); }
+    input:focus, textarea:focus, select:focus { border-color:var(--border-hover); }
+    textarea { resize:vertical; min-height:56px; }
+    select { direction:rtl; }
+    select option { background:#1a1a1a; }
+    .form-row input.title-input { flex:1; }
+    .date-wrap { position:relative; flex-shrink:0; }
+    .date-wrap input[type="date"] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; z-index:2; color-scheme:dark; }
+    .date-display { background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text-muted); font-size:13px; padding:9px 13px; white-space:nowrap; display:flex; align-items:center; gap:6px; min-width:140px; user-select:none; cursor:pointer; }
+    .date-display.has-date { color:var(--text-primary); border-color:var(--border-hover); }
+    .btn { background:var(--accent); border:none; border-radius:6px; color:#000; cursor:pointer; font-size:13px; font-weight:500; padding:9px 18px; transition:opacity 0.15s; white-space:nowrap; }
+    .btn:hover { opacity:0.85; }
+    .btn-ghost { background:transparent; border:1px solid var(--border); border-radius:6px; color:var(--text-secondary); cursor:pointer; font-size:13px; padding:9px 14px; transition:all 0.15s; white-space:nowrap; }
+    .btn-ghost:hover { border-color:var(--border-hover); color:var(--text-primary); }
+    .filters { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+    .filter-btn { background:transparent; border:1px solid var(--border); border-radius:20px; color:var(--text-secondary); cursor:pointer; font-size:12px; padding:5px 13px; transition:all 0.15s; }
+    .filter-btn:hover { border-color:var(--border-hover); color:var(--text-primary); }
+    .filter-btn.active { border-color:var(--accent); color:var(--accent); }
+    .section-label { font-size:10px; color:var(--text-muted); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+    .section-label .count { background:var(--surface); border:1px solid var(--border); border-radius:10px; font-size:9px; padding:1px 6px; color:var(--text-secondary); }
+    .task-group { margin-bottom:28px; }
+    .task-item { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:6px; display:flex; align-items:flex-start; gap:10px; transition:border-color 0.15s; }
+    .task-item:hover { border-color:var(--border-hover); }
+    .task-item.done { opacity:0.4; }
+    .checkbox { width:17px; height:17px; border:1.5px solid var(--border-hover); border-radius:4px; flex-shrink:0; margin-top:2px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
+    .checkbox:hover { border-color:var(--accent); }
+    .checkbox.checked { background:var(--accent); border-color:var(--accent); }
+    .checkbox.checked::after { content:''; width:9px; height:5px; border-left:2px solid #000; border-bottom:2px solid #000; transform:rotate(-45deg) translateY(-1px); }
+    .task-body { flex:1; min-width:0; }
+    .task-title { font-size:14px; font-weight:400; color:var(--text-primary); line-height:1.4; }
+    .task-item.done .task-title { text-decoration:line-through; color:var(--text-secondary); }
+    .task-desc { font-size:12px; color:var(--text-secondary); margin-top:3px; line-height:1.5; }
+    .task-meta { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; align-items:center; }
+    .tag { font-size:10px; padding:2px 7px; border-radius:10px; border:1px solid; }
+    .tag.high { color:var(--red); border-color:rgba(255,77,77,0.3); }
+    .tag.low { color:var(--text-muted); border-color:var(--border); }
+    .tag.due { color:var(--text-secondary); border-color:var(--border); }
+    .tag.overdue { color:var(--red); border-color:rgba(255,77,77,0.3); }
+    .tag.project { color:var(--accent); border-color:rgba(200,255,0,0.2); }
+    .tag.cal { color:#4285f4; border-color:rgba(66,133,244,0.3); cursor:pointer; display:inline-flex; align-items:center; gap:3px; background:none; font-family:inherit; }
+    .tag.cal:hover { background:rgba(66,133,244,0.1); }
+    .task-actions { flex-shrink:0; }
+    .icon-btn { background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:13px; padding:3px; border-radius:4px; transition:color 0.15s; line-height:1; }
+    .icon-btn:hover { color:var(--red); }
+    .empty { text-align:center; padding:40px 0; color:var(--text-muted); font-size:13px; }
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; align-items:center; justify-content:center; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--surface); border:1px solid var(--border-hover); border-radius:10px; padding:24px; width:300px; max-width:90vw; }
+    .modal h2 { font-size:14px; font-weight:400; margin-bottom:14px; }
+    .modal-row { display:flex; gap:8px; }
+    .toast { position:fixed; bottom:24px; left:24px; background:var(--surface2); border:1px solid var(--border-hover); border-radius:10px; color:var(--text-primary); font-size:13px; padding:14px 16px; opacity:0; pointer-events:none; transform:translateY(8px); transition:all 0.2s; z-index:100; min-width:200px; }
+    .toast.show { opacity:1; pointer-events:auto; transform:translateY(0); }
+    .toast-action { display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+    .toast-action.visible { display:block; }
+    .toast-cal-btn { display:flex; align-items:center; justify-content:center; gap:6px; background:#4285f4; color:#fff; border:none; border-radius:6px; font-size:13px; padding:9px 14px; cursor:pointer; width:100%; font-family:'DM Sans',sans-serif; }
+    .toast-cal-btn:hover { opacity:0.9; }
+    .loading { color:var(--text-muted); font-size:13px; padding:20px 0; }
+    @media (max-width:620px) {
+      .app { flex-direction:column; }
+      .sidebar { width:100%; position:static; }
+      .proj-list { flex-direction:row; flex-wrap:wrap; gap:6px; }
+      .proj-item { width:auto; }
+      .form-row { flex-direction:column; }
+      .date-wrap { width:100%; }
+      .date-display { min-width:unset; }
+      body { padding:24px 16px 60px; }
+      .toast { left:16px; right:16px; bottom:16px; }
     }
   </style>
 </head>
@@ -339,154 +185,142 @@
     </div>
   </div>
 
-  <!-- Toast with calendar action -->
   <div class="toast" id="toast">
-    <div class="toast-msg" id="toastMsg"></div>
+    <div id="toastMsg"></div>
     <div class="toast-action" id="toastAction">
-      <a class="toast-cal-btn" id="toastCalBtn" href="#" target="_blank" rel="noopener">
-        📆 הוסף ליומן Google
-      </a>
+      <button class="toast-cal-btn" onclick="goToCalendar()">📆 הוסף ליומן Google</button>
     </div>
   </div>
 
   <script>
-    var tasks = [], projects = [], filter = 'all', currentProject = 'all';
-    var toastTimer = null;
+    var tasks=[], projects=[], filter='all', currentProject='all';
+    var _calUrl=null, toastTimer=null;
 
     function gcalUrl(title, date, desc) {
-      var d = date.replace(/-/g, '');
-      return 'https://calendar.google.com/calendar/render?action=TEMPLATE'
-        + '&text=' + encodeURIComponent(title)
-        + '&dates=' + d + 'T080000/' + d + 'T090000'
-        + (desc ? '&details=' + encodeURIComponent(desc) : '')
-        + '&sf=true';
+      var d = date.replace(/-/g,'');
+      return 'https://calendar.google.com/calendar/r/eventedit'
+        +'?text='+encodeURIComponent(title)
+        +'&dates='+d+'T080000/'+d+'T090000'
+        +(desc?'&details='+encodeURIComponent(desc):'');
+    }
+
+    function goToCalendar() {
+      if (_calUrl) location.href = _calUrl;
+    }
+
+    function openCalTag(url) {
+      location.href = url;
     }
 
     function onDateChange(input) {
-      var lbl = document.getElementById('dateLabel');
-      var disp = document.getElementById('dateDisplay');
+      var lbl=document.getElementById('dateLabel'), disp=document.getElementById('dateDisplay');
       if (input.value) {
-        var p = input.value.split('-');
-        lbl.textContent = p[2]+'/'+p[1]+'/'+p[0].slice(2);
+        var p=input.value.split('-');
+        lbl.textContent=p[2]+'/'+p[1]+'/'+p[0].slice(2);
         disp.classList.add('has-date');
       } else {
-        lbl.textContent = 'תאריך יעד';
+        lbl.textContent='תאריך יעד';
         disp.classList.remove('has-date');
       }
     }
 
     function toast(msg, calUrl) {
       if (toastTimer) clearTimeout(toastTimer);
-      var el = document.getElementById('toast');
+      _calUrl = calUrl || null;
       document.getElementById('toastMsg').textContent = msg;
       var action = document.getElementById('toastAction');
-      var calBtn = document.getElementById('toastCalBtn');
-      if (calUrl) {
-        calBtn.href = calUrl;
-        action.classList.add('visible');
-      } else {
-        action.classList.remove('visible');
-      }
+      action.className = 'toast-action' + (calUrl ? ' visible' : '');
+      var el = document.getElementById('toast');
       el.classList.add('show');
-      toastTimer = setTimeout(function() { el.classList.remove('show'); }, calUrl ? 6000 : 2400);
+      toastTimer = setTimeout(function(){el.classList.remove('show');}, calUrl?8000:2400);
     }
 
     async function load() {
       try {
-        var [pRes, tRes] = await Promise.all([fetch('/api/projects'), fetch('/api/tasks')]);
-        projects = await pRes.json();
-        tasks = await tRes.json();
-        if (!Array.isArray(projects)) projects = [];
-        if (!Array.isArray(tasks)) tasks = [];
-        renderSidebar();
-        render();
-      } catch(e) {
-        document.getElementById('taskList').innerHTML = '<div class="empty">לא ניתן לטעון משימות</div>';
-      }
+        var [pRes,tRes]=await Promise.all([fetch('/api/projects'),fetch('/api/tasks')]);
+        projects=await pRes.json(); tasks=await tRes.json();
+        if(!Array.isArray(projects)) projects=[];
+        if(!Array.isArray(tasks)) tasks=[];
+        renderSidebar(); render();
+      } catch(e) { document.getElementById('taskList').innerHTML='<div class="empty">לא ניתן לטעון משימות</div>'; }
     }
 
     function renderSidebar() {
-      var list = document.getElementById('projList');
-      list.innerHTML = '';
-      var all = document.createElement('button');
-      all.className = 'proj-item' + (currentProject === 'all' ? ' active' : '');
-      all.setAttribute('data-id', 'all');
-      all.innerHTML = '<span class="proj-item-name">הכל</span>';
-      all.onclick = function() { selectProject('all', all); };
+      var list=document.getElementById('projList');
+      list.innerHTML='';
+      var all=document.createElement('button');
+      all.className='proj-item'+(currentProject==='all'?' active':'');
+      all.setAttribute('data-id','all');
+      all.innerHTML='<span class="proj-item-name">הכל</span>';
+      all.onclick=function(){selectProject('all',all);};
       list.appendChild(all);
-      projects.forEach(function(p) {
-        var btn = document.createElement('button');
-        btn.className = 'proj-item' + (currentProject === p.id ? ' active' : '');
-        btn.setAttribute('data-id', p.id);
-        var del = document.createElement('button');
-        del.className = 'proj-del'; del.textContent = '✕';
-        del.onclick = function(e) { e.stopPropagation(); deleteProject(p.id); };
-        var name = document.createElement('span');
-        name.className = 'proj-item-name'; name.textContent = p.name;
+      projects.forEach(function(p){
+        var btn=document.createElement('button');
+        btn.className='proj-item'+(currentProject===p.id?' active':'');
+        btn.setAttribute('data-id',p.id);
+        var del=document.createElement('button');
+        del.className='proj-del'; del.textContent='✕';
+        del.onclick=function(e){e.stopPropagation();deleteProject(p.id);};
+        var name=document.createElement('span');
+        name.className='proj-item-name'; name.textContent=p.name;
         btn.appendChild(del); btn.appendChild(name);
-        btn.onclick = function() { selectProject(p.id, btn); };
+        btn.onclick=function(){selectProject(p.id,btn);};
         list.appendChild(btn);
       });
     }
 
-    function selectProject(id, btn) {
-      currentProject = id;
+    function selectProject(id,btn){
+      currentProject=id;
       document.querySelectorAll('.proj-item').forEach(function(b){b.classList.remove('active');});
-      btn.classList.add('active');
-      loadTasks();
+      btn.classList.add('active'); loadTasks();
     }
-    async function loadTasks() {
-      try {
-        var url = '/api/tasks' + (currentProject !== 'all' ? '?project_id=' + currentProject : '');
-        var res = await fetch(url);
-        tasks = await res.json();
-        if (!Array.isArray(tasks)) tasks = [];
-        render();
-      } catch(e) { toast('שגיאה בטעינת משימות'); }
+    async function loadTasks(){
+      try{
+        var url='/api/tasks'+(currentProject!=='all'?'?project_id='+currentProject:'');
+        var res=await fetch(url); tasks=await res.json();
+        if(!Array.isArray(tasks)) tasks=[]; render();
+      }catch(e){toast('שגיאה בטעינת משימות');}
     }
-
-    function openAddProject() {
+    function openAddProject(){
       document.getElementById('modalOverlay').classList.add('open');
       setTimeout(function(){document.getElementById('projNameInput').focus();},50);
     }
-    function closeAddProject(e) {
-      if (e && e.target !== document.getElementById('modalOverlay')) return;
+    function closeAddProject(e){
+      if(e&&e.target!==document.getElementById('modalOverlay')) return;
       document.getElementById('modalOverlay').classList.remove('open');
-      document.getElementById('projNameInput').value = '';
+      document.getElementById('projNameInput').value='';
     }
-    async function addProject() {
-      var name = document.getElementById('projNameInput').value.trim();
-      if (!name) { toast('הכנס שם פרויקט'); return; }
-      try {
-        var res = await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name})});
-        var proj = await res.json();
-        if (proj.error) throw new Error(proj.error);
+    async function addProject(){
+      var name=document.getElementById('projNameInput').value.trim();
+      if(!name){toast('הכנס שם פרויקט');return;}
+      try{
+        var res=await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name})});
+        var proj=await res.json();
+        if(proj.error) throw new Error(proj.error);
         projects.push(proj);
         document.getElementById('modalOverlay').classList.remove('open');
-        document.getElementById('projNameInput').value = '';
+        document.getElementById('projNameInput').value='';
         renderSidebar();
-        var newBtn = document.querySelector('[data-id="'+proj.id+'"]');
-        if (newBtn) selectProject(proj.id, newBtn);
+        var newBtn=document.querySelector('[data-id="'+proj.id+'"]');
+        if(newBtn) selectProject(proj.id,newBtn);
         toast('פרויקט נוצר');
-      } catch(e) { toast('שגיאה: '+e.message); }
+      }catch(e){toast('שגיאה: '+e.message);}
     }
-    async function deleteProject(id) {
-      if (!confirm('למחוק פרויקט זה?')) return;
-      try {
+    async function deleteProject(id){
+      if(!confirm('למחוק פרויקט זה?')) return;
+      try{
         await fetch('/api/projects/'+id,{method:'DELETE'});
-        projects = projects.filter(function(p){return p.id!==id;});
-        if (currentProject===id) currentProject='all';
-        renderSidebar(); loadTasks();
-        toast('פרויקט נמחק');
-      } catch(e) { toast('שגיאה'); }
+        projects=projects.filter(function(p){return p.id!==id;});
+        if(currentProject===id) currentProject='all';
+        renderSidebar(); loadTasks(); toast('פרויקט נמחק');
+      }catch(e){toast('שגיאה');}
     }
-
-    function setFilter(f,btn) {
+    function setFilter(f,btn){
       filter=f;
       document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active');});
       btn.classList.add('active'); render();
     }
-    function filtered() {
+    function filtered(){
       return tasks.filter(function(t){
         if(filter==='active') return t.status!=='done';
         if(filter==='done') return t.status==='done';
@@ -494,12 +328,12 @@
         return true;
       });
     }
-    function fmtDate(d) {
+    function fmtDate(d){
       if(!d) return null;
       var p=d.split('T')[0].split('-');
       return p[2]+'/'+p[1]+'/'+p[0].slice(2);
     }
-    function overdue(t) {
+    function overdue(t){
       if(!t.due_date||t.status==='done') return false;
       return new Date(t.due_date)<new Date(new Date().toDateString());
     }
@@ -509,12 +343,12 @@
       var p=projects.find(function(x){return x.id===pid;});
       return p?p.name:null;
     }
-    function render() {
+    function render(){
       var list=filtered();
       var active=list.filter(function(t){return t.status!=='done';});
       var done=list.filter(function(t){return t.status==='done';});
       var html='';
-      if(!active.length&&!done.length){html='<div class="empty">אין משימות</div>';}
+      if(!active.length&&!done.length) html='<div class="empty">אין משימות</div>';
       else{if(active.length)html+=group('ממתין',active);if(done.length)html+=group('הושלם',done);}
       document.getElementById('taskList').innerHTML=html;
     }
@@ -533,14 +367,17 @@
         if(t.priority==='low') h+='<span class="tag low">נמוכה</span>';
         if(dateStr){
           h+='<span class="tag '+(od?'overdue':'due')+'">'+(od?'באיחור · ':'')+fmtDate(dateStr)+'</span>';
-          if(!isDone) h+='<a class="tag cal" href="'+gcalUrl(t.title,dateStr,t.description)+'" target="_blank" rel="noopener">📆 יומן</a>';
+          if(!isDone){
+            var cu=gcalUrl(t.title,dateStr,t.description);
+            h+='<button class="tag cal" onclick="openCalTag(\''+cu.replace(/'/g,"%27")+'\'">📆 יומן</button>';
+          }
         }
         if(pname) h+='<span class="tag project">'+esc(pname)+'</span>';
         h+='</div></div><div class="checkbox'+(isDone?' checked':'')+'" onclick="toggle(\''+t.id+'\',' +isDone+')"></div></div>';
       });
       return h+'</div>';
     }
-    async function addTask() {
+    async function addTask(){
       var title=document.getElementById('titleInput').value.trim();
       if(!title){toast('הכנס כותרת משימה');return;}
       var dueDate=document.getElementById('dueDateInput').value;
@@ -557,22 +394,20 @@
         document.getElementById('priorityInput').value='normal';
         onDateChange(document.getElementById('dueDateInput'));
         render();
-        toast('משימה נוספה', dueDate ? gcalUrl(title, dueDate, desc) : null);
+        toast('משימה נוספה', dueDate?gcalUrl(title,dueDate,desc):null);
       }catch(e){toast('שגיאה: '+e.message);}
     }
     async function toggle(id,wasDone){
       try{
         var res=await fetch('/api/tasks/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:wasDone?'todo':'done'})});
         var updated=await res.json();
-        tasks=tasks.map(function(t){return t.id===id?updated:t;});
-        render();
+        tasks=tasks.map(function(t){return t.id===id?updated:t;}); render();
       }catch(e){toast('שגיאה');}
     }
     async function del(id){
       try{
         await fetch('/api/tasks/'+id,{method:'DELETE'});
-        tasks=tasks.filter(function(t){return t.id!==id;});
-        render(); toast('נמחק');
+        tasks=tasks.filter(function(t){return t.id!==id;}); render(); toast('נמחק');
       }catch(e){toast('שגיאה');}
     }
     document.getElementById('titleInput').addEventListener('keydown',function(e){if(e.key==='Enter')addTask();});

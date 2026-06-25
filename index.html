@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -46,7 +46,7 @@
       font-family: 'DM Mono', monospace;
       font-size: 10px;
       font-weight: 400;
-      letter-spacing: 0.22em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--text-muted);
       margin-bottom: 2px;
@@ -54,7 +54,7 @@
     header h1 {
       font-size: 28px;
       font-weight: 200;
-      letter-spacing: -0.03em;
+      letter-spacing: -0.01em;
       color: var(--text-primary);
       line-height: 1.1;
     }
@@ -77,19 +77,16 @@
       border-bottom: 2px solid transparent;
       color: var(--text-secondary);
       cursor: pointer;
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 400;
-      letter-spacing: 0.1em;
       padding: 10px 18px 12px;
-      text-transform: uppercase;
       white-space: nowrap;
       transition: all 0.15s;
       margin-bottom: -1px;
     }
     .proj-tab:hover { color: var(--text-primary); }
     .proj-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-    .proj-tab .proj-del { display: none; margin-left: 6px; color: var(--text-muted); font-size: 10px; }
+    .proj-tab .proj-del { display: none; margin-right: 6px; color: var(--text-muted); font-size: 10px; }
     .proj-tab:hover .proj-del { display: inline; }
     .proj-tab .proj-del:hover { color: var(--red); }
     .proj-add-btn {
@@ -97,7 +94,6 @@
       border: none;
       color: var(--text-muted);
       cursor: pointer;
-      font-family: 'DM Mono', monospace;
       font-size: 18px;
       padding: 8px 14px 12px;
       margin-bottom: -1px;
@@ -129,9 +125,6 @@
       font-weight: 400;
       color: var(--text-primary);
       margin-bottom: 16px;
-      font-family: 'DM Mono', monospace;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
     }
     .modal-row { display: flex; gap: 8px; }
 
@@ -156,10 +149,12 @@
       outline: none;
       transition: border-color 0.15s;
       width: 100%;
+      text-align: right;
     }
     input::placeholder, textarea::placeholder { color: var(--text-muted); }
     input:focus, textarea:focus, select:focus { border-color: var(--border-hover); }
     textarea { resize: vertical; min-height: 64px; }
+    select { text-align: right; direction: rtl; }
     select option { background: #1a1a1a; }
     .form-row input.title-input { flex: 1; }
     .btn {
@@ -168,12 +163,9 @@
       border-radius: 6px;
       color: #000;
       cursor: pointer;
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 500;
-      letter-spacing: 0.08em;
       padding: 10px 20px;
-      text-transform: uppercase;
       transition: opacity 0.15s;
       white-space: nowrap;
     }
@@ -184,12 +176,9 @@
       border-radius: 6px;
       color: var(--text-secondary);
       cursor: pointer;
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 400;
-      letter-spacing: 0.08em;
       padding: 10px 16px;
-      text-transform: uppercase;
       transition: all 0.15s;
       white-space: nowrap;
     }
@@ -202,23 +191,17 @@
       border-radius: 20px;
       color: var(--text-secondary);
       cursor: pointer;
-      font-family: 'DM Mono', monospace;
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 400;
-      letter-spacing: 0.1em;
       padding: 6px 14px;
-      text-transform: uppercase;
       transition: all 0.15s;
     }
     .filter-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
     .filter-btn.active { border-color: var(--accent); color: var(--accent); }
 
     .section-label {
-      font-family: 'DM Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 400;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
       color: var(--text-muted);
       margin-bottom: 12px;
       display: flex;
@@ -274,11 +257,8 @@
     .task-desc { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
     .task-meta { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
     .tag {
-      font-family: 'DM Mono', monospace;
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 400;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
       padding: 2px 8px;
       border-radius: 10px;
       border: 1px solid;
@@ -304,7 +284,7 @@
     .empty { text-align: center; padding: 48px 0; color: var(--text-muted); font-size: 13px; }
     .toast {
       position: fixed;
-      bottom: 24px; right: 24px;
+      bottom: 24px; left: 24px;
       background: var(--surface2);
       border: 1px solid var(--border-hover);
       border-radius: 8px;
@@ -335,52 +315,49 @@
       <polyline points="156,360 220,424 356,300" fill="none" stroke="#c8ff00" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <div class="header-text">
-      <div class="header-label">kessler</div>
-      <h1>my <span>tasks</span></h1>
+      <div class="header-label">kessler task</div>
+      <h1>המשימות <span>שלי</span></h1>
     </div>
   </header>
 
   <div class="main">
-    <div class="projects-bar" id="projectsBar">
-      <button class="proj-tab active" data-id="all" onclick="selectProject('all', this)">all</button>
-      <button class="proj-add-btn" onclick="openAddProject()" title="new project">+</button>
-    </div>
+    <div class="projects-bar" id="projectsBar"></div>
 
     <div class="add-form">
       <div class="form-row">
-        <input id="titleInput" class="title-input" type="text" placeholder="new task..." autocomplete="off"/>
+        <input id="titleInput" class="title-input" type="text" placeholder="משימה חדשה..." autocomplete="off"/>
       </div>
       <div class="form-row">
-        <textarea id="descInput" placeholder="notes (optional)"></textarea>
+        <textarea id="descInput" placeholder="הערות (אופציונלי)"></textarea>
       </div>
       <div class="form-row">
         <select id="priorityInput">
-          <option value="normal">priority: normal</option>
-          <option value="high">priority: high</option>
-          <option value="low">priority: low</option>
+          <option value="normal">עדיפות: רגילה</option>
+          <option value="high">עדיפות: גבוהה</option>
+          <option value="low">עדיפות: נמוכה</option>
         </select>
         <input id="dueDateInput" type="date" style="max-width:180px"/>
-        <button class="btn" onclick="addTask()">add</button>
+        <button class="btn" onclick="addTask()">הוסף</button>
       </div>
     </div>
 
     <div class="filters">
-      <button class="filter-btn active" onclick="setFilter('all', this)">all</button>
-      <button class="filter-btn" onclick="setFilter('active', this)">active</button>
-      <button class="filter-btn" onclick="setFilter('done', this)">done</button>
-      <button class="filter-btn" onclick="setFilter('high', this)">high priority</button>
+      <button class="filter-btn active" onclick="setFilter('all', this)">הכל</button>
+      <button class="filter-btn" onclick="setFilter('active', this)">פעיל</button>
+      <button class="filter-btn" onclick="setFilter('done', this)">הושלם</button>
+      <button class="filter-btn" onclick="setFilter('high', this)">עדיפות גבוהה</button>
     </div>
 
-    <div id="taskList"><div class="loading">loading...</div></div>
+    <div id="taskList"><div class="loading">טוען...</div></div>
   </div>
 
   <div class="modal-overlay" id="modalOverlay" onclick="closeAddProject(event)">
     <div class="modal">
-      <h2>new project</h2>
+      <h2>פרויקט חדש</h2>
       <div class="modal-row">
-        <input id="projNameInput" type="text" placeholder="project name..." autocomplete="off"/>
-        <button class="btn" onclick="addProject()">add</button>
-        <button class="btn-ghost" onclick="closeAddProject()">cancel</button>
+        <input id="projNameInput" type="text" placeholder="שם פרויקט..." autocomplete="off"/>
+        <button class="btn" onclick="addProject()">הוסף</button>
+        <button class="btn-ghost" onclick="closeAddProject()">ביטול</button>
       </div>
     </div>
   </div>
@@ -403,40 +380,43 @@
         renderProjects();
         render();
       } catch(e) {
-        document.getElementById('taskList').innerHTML = '<div class="empty">could not load tasks</div>';
+        document.getElementById('taskList').innerHTML = '<div class="empty">לא ניתן לטעון משימות</div>';
       }
     }
 
     function renderProjects() {
       var bar = document.getElementById('projectsBar');
       bar.innerHTML = '';
-      var allBtn = document.createElement('button');
-      allBtn.className = 'proj-tab' + (currentProject === 'all' ? ' active' : '');
-      allBtn.setAttribute('data-id', 'all');
-      allBtn.textContent = 'all';
-      allBtn.onclick = function() { selectProject('all', allBtn); };
-      bar.appendChild(allBtn);
-      projects.forEach(function(p) {
+
+      var addBtn = document.createElement('button');
+      addBtn.className = 'proj-add-btn';
+      addBtn.textContent = '+';
+      addBtn.title = 'פרויקט חדש';
+      addBtn.onclick = openAddProject;
+      bar.appendChild(addBtn);
+
+      projects.slice().reverse().forEach(function(p) {
         var btn = document.createElement('button');
         btn.className = 'proj-tab' + (currentProject === p.id ? ' active' : '');
         btn.setAttribute('data-id', p.id);
-        var nameSpan = document.createElement('span');
-        nameSpan.textContent = p.name;
-        btn.appendChild(nameSpan);
         var delSpan = document.createElement('span');
         delSpan.className = 'proj-del';
         delSpan.textContent = '✕';
         delSpan.onclick = function(e) { e.stopPropagation(); deleteProject(p.id); };
         btn.appendChild(delSpan);
+        var nameSpan = document.createElement('span');
+        nameSpan.textContent = p.name;
+        btn.appendChild(nameSpan);
         btn.onclick = function() { selectProject(p.id, btn); };
         bar.appendChild(btn);
       });
-      var addBtn = document.createElement('button');
-      addBtn.className = 'proj-add-btn';
-      addBtn.textContent = '+';
-      addBtn.title = 'new project';
-      addBtn.onclick = openAddProject;
-      bar.appendChild(addBtn);
+
+      var allBtn = document.createElement('button');
+      allBtn.className = 'proj-tab' + (currentProject === 'all' ? ' active' : '');
+      allBtn.setAttribute('data-id', 'all');
+      allBtn.textContent = 'הכל';
+      allBtn.onclick = function() { selectProject('all', allBtn); };
+      bar.appendChild(allBtn);
     }
 
     function selectProject(id, btn) {
@@ -453,7 +433,7 @@
         tasks = await res.json();
         if (!Array.isArray(tasks)) tasks = [];
         render();
-      } catch(e) { toast('error loading tasks'); }
+      } catch(e) { toast('שגיאה בטעינת משימות'); }
     }
 
     function openAddProject() {
@@ -469,7 +449,7 @@
 
     async function addProject() {
       var name = document.getElementById('projNameInput').value.trim();
-      if (!name) { toast('enter a project name'); return; }
+      if (!name) { toast('הכנס שם פרויקט'); return; }
       try {
         var res = await fetch('/api/projects', {
           method: 'POST',
@@ -482,21 +462,22 @@
         document.getElementById('modalOverlay').classList.remove('open');
         document.getElementById('projNameInput').value = '';
         renderProjects();
-        selectProject(proj.id, document.querySelector('[data-id="' + proj.id + '"]'));
-        toast('project created');
-      } catch(e) { toast('error: ' + e.message); }
+        var newBtn = document.querySelector('[data-id="' + proj.id + '"]');
+        if (newBtn) selectProject(proj.id, newBtn);
+        toast('פרויקט נוצר');
+      } catch(e) { toast('שגיאה: ' + e.message); }
     }
 
     async function deleteProject(id) {
-      if (!confirm('delete this project? tasks will remain without a project.')) return;
+      if (!confirm('למחוק פרויקט זה? המשימות יישארו ללא פרויקט.')) return;
       try {
         await fetch('/api/projects/' + id, { method: 'DELETE' });
         projects = projects.filter(function(p) { return p.id !== id; });
         if (currentProject === id) currentProject = 'all';
         renderProjects();
         loadTasks();
-        toast('project deleted');
-      } catch(e) { toast('error'); }
+        toast('פרויקט נמחק');
+      } catch(e) { toast('שגיאה'); }
     }
 
     function setFilter(f, btn) {
@@ -542,10 +523,10 @@
       var done = list.filter(function(t) { return t.status === 'done'; });
       var html = '';
       if (!active.length && !done.length) {
-        html = '<div class="empty">no tasks</div>';
+        html = '<div class="empty">אין משימות</div>';
       } else {
-        if (active.length) html += group('pending', active);
-        if (done.length) html += group('done', done);
+        if (active.length) html += group('ממתין', active);
+        if (done.length) html += group('הושלם', done);
       }
       document.getElementById('taskList').innerHTML = html;
     }
@@ -558,17 +539,17 @@
         var od = overdue(t);
         var pname = currentProject === 'all' ? projectName(t.project_id) : null;
         h += '<div class="task-item' + (isDone ? ' done' : '') + '">';
-        h += '<div class="checkbox' + (isDone ? ' checked' : '') + '" onclick="toggle(\'' + t.id + '\',' + isDone + ')"></div>';
+        h += '<div class="task-actions"><button class="icon-btn" onclick="del(\'' + t.id + '\')" title="מחק">✕</button></div>';
         h += '<div class="task-body">';
         h += '<div class="task-title">' + esc(t.title) + '</div>';
         if (t.description) h += '<div class="task-desc">' + esc(t.description) + '</div>';
         h += '<div class="task-meta">';
-        if (t.priority === 'high') h += '<span class="tag high">high</span>';
-        if (t.priority === 'low') h += '<span class="tag low">low</span>';
-        if (t.due_date) h += '<span class="tag ' + (od ? 'overdue' : 'due') + '">' + (od ? 'overdue · ' : '') + fmtDate(t.due_date) + '</span>';
+        if (t.priority === 'high') h += '<span class="tag high">גבוהה</span>';
+        if (t.priority === 'low') h += '<span class="tag low">נמוכה</span>';
+        if (t.due_date) h += '<span class="tag ' + (od ? 'overdue' : 'due') + '">' + (od ? 'באיחור · ' : '') + fmtDate(t.due_date) + '</span>';
         if (pname) h += '<span class="tag project">' + esc(pname) + '</span>';
         h += '</div></div>';
-        h += '<div class="task-actions"><button class="icon-btn" onclick="del(\'' + t.id + '\')" title="delete">✕</button></div>';
+        h += '<div class="checkbox' + (isDone ? ' checked' : '') + '" onclick="toggle(\'' + t.id + '\',' + isDone + ')"></div>';
         h += '</div>';
       });
       return h + '</div>';
@@ -576,7 +557,7 @@
 
     async function addTask() {
       var title = document.getElementById('titleInput').value.trim();
-      if (!title) { toast('enter a task title'); return; }
+      if (!title) { toast('הכנס כותרת משימה'); return; }
       var payload = {
         title: title,
         description: document.getElementById('descInput').value.trim() || null,
@@ -598,8 +579,8 @@
         document.getElementById('dueDateInput').value = '';
         document.getElementById('priorityInput').value = 'normal';
         render();
-        toast('task added');
-      } catch(e) { toast('error: ' + e.message); }
+        toast('משימה נוספה');
+      } catch(e) { toast('שגיאה: ' + e.message); }
     }
 
     async function toggle(id, wasDone) {
@@ -612,7 +593,7 @@
         var updated = await res.json();
         tasks = tasks.map(function(t) { return t.id === id ? updated : t; });
         render();
-      } catch(e) { toast('error'); }
+      } catch(e) { toast('שגיאה'); }
     }
 
     async function del(id) {
@@ -620,8 +601,8 @@
         await fetch('/api/tasks/' + id, { method: 'DELETE' });
         tasks = tasks.filter(function(t) { return t.id !== id; });
         render();
-        toast('deleted');
-      } catch(e) { toast('error'); }
+        toast('נמחק');
+      } catch(e) { toast('שגיאה'); }
     }
 
     function toast(msg) {

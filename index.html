@@ -3,72 +3,349 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Tasks</title>
+  <title>Kessler Task</title>
+  <meta name="theme-color" content="#0a0a0a"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Tasks"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <link rel="apple-touch-icon" href="/icon.svg"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@200;300;400&display=swap" rel="stylesheet"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg: #0a0a0a; --surface: #111111; --surface2: #161616;
-      --border: #1c1c1c; --border-hover: #2e2e2e;
-      --text-primary: #e8e8e8; --text-secondary: #888; --text-muted: #444;
-      --accent: #c8ff00; --red: #ff4d4d;
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface2: #161616;
+      --border: #1c1c1c;
+      --border-hover: #2e2e2e;
+      --text-primary: #e8e8e8;
+      --text-secondary: #888;
+      --text-muted: #444;
+      --accent: #c8ff00;
+      --red: #ff4d4d;
+      --yellow: #f5a623;
     }
-    body { background: var(--bg); color: var(--text-primary); font-family: 'DM Sans', sans-serif; font-weight: 300; min-height: 100vh; padding: 56px 24px 80px; }
-    header { max-width: 760px; margin: 0 auto 48px; }
-    .header-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
-    header h1 { font-size: 36px; font-weight: 200; letter-spacing: -0.03em; line-height: 1.1; }
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      padding: 48px 24px 80px;
+    }
+    header {
+      max-width: 760px;
+      margin: 0 auto 36px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .logo { width: 44px; height: 44px; flex-shrink: 0; }
+    .header-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+    header h1 {
+      font-size: 28px;
+      font-weight: 200;
+      letter-spacing: -0.03em;
+      color: var(--text-primary);
+      line-height: 1.1;
+    }
     header h1 span { color: var(--accent); }
     .main { max-width: 760px; margin: 0 auto; }
-    .add-form { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 32px; }
+
+    .projects-bar {
+      display: flex;
+      align-items: center;
+      margin-bottom: 28px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      border-bottom: 1px solid var(--border);
+    }
+    .projects-bar::-webkit-scrollbar { display: none; }
+    .proj-tab {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      padding: 10px 18px 12px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      transition: all 0.15s;
+      margin-bottom: -1px;
+    }
+    .proj-tab:hover { color: var(--text-primary); }
+    .proj-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .proj-tab .proj-del { display: none; margin-left: 6px; color: var(--text-muted); font-size: 10px; }
+    .proj-tab:hover .proj-del { display: inline; }
+    .proj-tab .proj-del:hover { color: var(--red); }
+    .proj-add-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: 18px;
+      padding: 8px 14px 12px;
+      margin-bottom: -1px;
+      transition: color 0.15s;
+      line-height: 1;
+    }
+    .proj-add-btn:hover { color: var(--accent); }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border-hover);
+      border-radius: 10px;
+      padding: 24px;
+      width: 320px;
+      max-width: 90vw;
+    }
+    .modal h2 {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .modal-row { display: flex; gap: 8px; }
+
+    .add-form {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 28px;
+    }
     .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
     .form-row:last-child { margin-bottom: 0; }
-    input, textarea, select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; padding: 10px 14px; outline: none; transition: border-color 0.15s; width: 100%; }
+    input, textarea, select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 300;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
     input::placeholder, textarea::placeholder { color: var(--text-muted); }
     input:focus, textarea:focus, select:focus { border-color: var(--border-hover); }
     textarea { resize: vertical; min-height: 64px; }
     select option { background: #1a1a1a; }
-    .btn { background: var(--accent); border: none; border-radius: 6px; color: #000; cursor: pointer; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.08em; padding: 10px 20px; text-transform: uppercase; transition: opacity 0.15s; white-space: nowrap; }
+    .form-row input.title-input { flex: 1; }
+    .btn {
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      color: #000;
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      padding: 10px 20px;
+      text-transform: uppercase;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
     .btn:hover { opacity: 0.85; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      padding: 10px 16px;
+      text-transform: uppercase;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-ghost:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
     .filters { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
-    .filter-btn { background: transparent; border: 1px solid var(--border); border-radius: 20px; color: var(--text-secondary); cursor: pointer; font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; padding: 6px 14px; text-transform: uppercase; transition: all 0.15s; }
+    .filter-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      padding: 6px 14px;
+      text-transform: uppercase;
+      transition: all 0.15s;
+    }
     .filter-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
     .filter-btn.active { border-color: var(--accent); color: var(--accent); }
-    .section-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-    .section-label .count { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-size: 9px; padding: 1px 7px; color: var(--text-secondary); }
+
+    .section-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-label .count {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 9px;
+      padding: 1px 7px;
+      color: var(--text-secondary);
+    }
     .task-group { margin-bottom: 32px; }
-    .task-item { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 12px; transition: border-color 0.15s; }
+    .task-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      transition: border-color 0.15s;
+    }
     .task-item:hover { border-color: var(--border-hover); }
     .task-item.done { opacity: 0.4; }
-    .checkbox { width: 18px; height: 18px; border: 1.5px solid var(--border-hover); border-radius: 4px; flex-shrink: 0; margin-top: 2px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+    .checkbox {
+      width: 18px; height: 18px;
+      border: 1.5px solid var(--border-hover);
+      border-radius: 4px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
     .checkbox:hover { border-color: var(--accent); }
     .checkbox.checked { background: var(--accent); border-color: var(--accent); }
-    .checkbox.checked::after { content: ''; width: 10px; height: 6px; border-left: 2px solid #000; border-bottom: 2px solid #000; transform: rotate(-45deg) translateY(-1px); }
+    .checkbox.checked::after {
+      content: '';
+      width: 10px; height: 6px;
+      border-left: 2px solid #000;
+      border-bottom: 2px solid #000;
+      transform: rotate(-45deg) translateY(-1px);
+    }
     .task-body { flex: 1; min-width: 0; }
-    .task-title { font-size: 14px; font-weight: 400; line-height: 1.4; }
+    .task-title { font-size: 14px; font-weight: 400; color: var(--text-primary); line-height: 1.4; }
     .task-item.done .task-title { text-decoration: line-through; color: var(--text-secondary); }
     .task-desc { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
     .task-meta { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
-    .tag { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 8px; border-radius: 10px; border: 1px solid; }
+    .tag {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 10px;
+      border: 1px solid;
+    }
     .tag.high { color: var(--red); border-color: rgba(255,77,77,0.3); }
     .tag.low { color: var(--text-muted); border-color: var(--border); }
     .tag.due { color: var(--text-secondary); border-color: var(--border); }
     .tag.overdue { color: var(--red); border-color: rgba(255,77,77,0.3); }
+    .tag.project { color: var(--accent); border-color: rgba(200,255,0,0.2); }
     .task-actions { flex-shrink: 0; }
-    .icon-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 4px; border-radius: 4px; transition: color 0.15s; line-height: 1; }
+    .icon-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+      border-radius: 4px;
+      transition: color 0.15s;
+      line-height: 1;
+    }
     .icon-btn:hover { color: var(--red); }
     .empty { text-align: center; padding: 48px 0; color: var(--text-muted); font-size: 13px; }
-    .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid var(--border-hover); border-radius: 8px; color: var(--text-primary); font-size: 13px; padding: 12px 18px; opacity: 0; pointer-events: none; transform: translateY(8px); transition: all 0.2s; z-index: 100; }
+    .toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border-hover);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 13px;
+      padding: 12px 18px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: all 0.2s;
+      z-index: 100;
+    }
     .toast.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
     .loading { color: var(--text-muted); font-size: 13px; padding: 24px 0; }
-    @media (max-width: 520px) { .form-row { flex-direction: column; } body { padding: 32px 16px 60px; } }
+    @media (max-width: 520px) {
+      .form-row { flex-direction: column; }
+      body { padding: 28px 16px 60px; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <div class="header-label">tasks</div>
-    <h1>my <span>tasks</span></h1>
+    <svg class="logo" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <rect width="512" height="512" rx="100" fill="#0a0a0a"/>
+      <rect x="40" y="40" width="432" height="432" rx="72" fill="#111111"/>
+      <text x="256" y="200" text-anchor="middle" font-family="sans-serif" font-size="80" font-weight="300" fill="#888">kessler</text>
+      <text x="256" y="290" text-anchor="middle" font-family="sans-serif" font-size="80" font-weight="700" fill="#c8ff00">task</text>
+      <polyline points="156,360 220,424 356,300" fill="none" stroke="#c8ff00" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="header-text">
+      <div class="header-label">kessler</div>
+      <h1>my <span>tasks</span></h1>
+    </div>
   </header>
+
   <div class="main">
+    <div class="projects-bar" id="projectsBar">
+      <button class="proj-tab active" data-id="all" onclick="selectProject('all', this)">all</button>
+      <button class="proj-add-btn" onclick="openAddProject()" title="new project">+</button>
+    </div>
+
     <div class="add-form">
       <div class="form-row">
         <input id="titleInput" class="title-input" type="text" placeholder="new task..." autocomplete="off"/>
@@ -86,30 +363,282 @@
         <button class="btn" onclick="addTask()">add</button>
       </div>
     </div>
+
     <div class="filters">
-      <button class="filter-btn active" onclick="setFilter('all',this)">all</button>
-      <button class="filter-btn" onclick="setFilter('active',this)">active</button>
-      <button class="filter-btn" onclick="setFilter('done',this)">done</button>
-      <button class="filter-btn" onclick="setFilter('high',this)">high priority</button>
+      <button class="filter-btn active" onclick="setFilter('all', this)">all</button>
+      <button class="filter-btn" onclick="setFilter('active', this)">active</button>
+      <button class="filter-btn" onclick="setFilter('done', this)">done</button>
+      <button class="filter-btn" onclick="setFilter('high', this)">high priority</button>
     </div>
+
     <div id="taskList"><div class="loading">loading...</div></div>
   </div>
+
+  <div class="modal-overlay" id="modalOverlay" onclick="closeAddProject(event)">
+    <div class="modal">
+      <h2>new project</h2>
+      <div class="modal-row">
+        <input id="projNameInput" type="text" placeholder="project name..." autocomplete="off"/>
+        <button class="btn" onclick="addProject()">add</button>
+        <button class="btn-ghost" onclick="closeAddProject()">cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
+
   <script>
-    var tasks=[], filter='all';
-    async function load(){try{var r=await fetch('/api/tasks');tasks=await r.json();if(!Array.isArray(tasks))tasks=[];render();}catch(e){document.getElementById('taskList').innerHTML='<div class="empty">could not load tasks</div>';}}
-    function setFilter(f,btn){filter=f;document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');render();}
-    function filtered(){return tasks.filter(function(t){if(filter==='active')return t.status!=='done';if(filter==='done')return t.status==='done';if(filter==='high')return t.priority==='high'&&t.status!=='done';return true;});}
-    function fmtDate(d){if(!d)return null;var p=d.split('T')[0].split('-');return p[2]+'/'+p[1]+'/'+p[0].slice(2);}
-    function overdue(t){if(!t.due_date||t.status==='done')return false;return new Date(t.due_date)<new Date(new Date().toDateString());}
-    function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-    function render(){var list=filtered(),active=list.filter(function(t){return t.status!=='done';}),done=list.filter(function(t){return t.status==='done';});var html='';if(!active.length&&!done.length){html='<div class="empty">no tasks</div>';}else{if(active.length)html+=group('pending',active);if(done.length)html+=group('done',done);}document.getElementById('taskList').innerHTML=html;}
-    function group(label,items){var h='<div class="task-group"><div class="section-label">'+label+' <span class="count">'+items.length+'</span></div>';items.forEach(function(t){var isDone=t.status==='done',od=overdue(t);h+='<div class="task-item'+(isDone?' done':'')+'"><div class="checkbox'+(isDone?' checked':'')+'" onclick="toggle(\''+t.id+'\','+isDone+')"></div><div class="task-body"><div class="task-title">'+esc(t.title)+'</div>'+(t.description?'<div class="task-desc">'+esc(t.description)+'</div>':'')+'<div class="task-meta">'+(t.priority==='high'?'<span class="tag high">high</span>':'')+(t.priority==='low'?'<span class="tag low">low</span>':'')+(t.due_date?'<span class="tag '+(od?'overdue':'due')+'">'+(od?'overdue · ':'')+fmtDate(t.due_date)+'</span>':'')+'</div></div><div class="task-actions"><button class="icon-btn" onclick="del(\''+t.id+'\')" title="delete">✕</button></div></div>';});return h+'</div>';}
-    async function addTask(){var title=document.getElementById('titleInput').value.trim();if(!title){toast('enter a task title');return;}try{var r=await fetch('/api/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:title,description:document.getElementById('descInput').value.trim()||null,priority:document.getElementById('priorityInput').value,due_date:document.getElementById('dueDateInput').value||null})});var task=await r.json();if(task.error)throw new Error(task.error);tasks.unshift(task);document.getElementById('titleInput').value='';document.getElementById('descInput').value='';document.getElementById('dueDateInput').value='';document.getElementById('priorityInput').value='normal';render();toast('task added');}catch(e){toast('error: '+e.message);}}
-    async function toggle(id,wasDone){try{var r=await fetch('/api/tasks/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:wasDone?'todo':'done'})});var u=await r.json();tasks=tasks.map(function(t){return t.id===id?u:t;});render();}catch(e){toast('error');}}
-    async function del(id){try{await fetch('/api/tasks/'+id,{method:'DELETE'});tasks=tasks.filter(function(t){return t.id!==id;});render();toast('deleted');}catch(e){toast('error');}}
-    function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},2200);}
-    document.getElementById('titleInput').addEventListener('keydown',function(e){if(e.key==='Enter')addTask();});
+    var tasks = [];
+    var projects = [];
+    var filter = 'all';
+    var currentProject = 'all';
+
+    async function load() {
+      try {
+        var [pRes, tRes] = await Promise.all([fetch('/api/projects'), fetch('/api/tasks')]);
+        projects = await pRes.json();
+        tasks = await tRes.json();
+        if (!Array.isArray(projects)) projects = [];
+        if (!Array.isArray(tasks)) tasks = [];
+        renderProjects();
+        render();
+      } catch(e) {
+        document.getElementById('taskList').innerHTML = '<div class="empty">could not load tasks</div>';
+      }
+    }
+
+    function renderProjects() {
+      var bar = document.getElementById('projectsBar');
+      bar.innerHTML = '';
+      var allBtn = document.createElement('button');
+      allBtn.className = 'proj-tab' + (currentProject === 'all' ? ' active' : '');
+      allBtn.setAttribute('data-id', 'all');
+      allBtn.textContent = 'all';
+      allBtn.onclick = function() { selectProject('all', allBtn); };
+      bar.appendChild(allBtn);
+      projects.forEach(function(p) {
+        var btn = document.createElement('button');
+        btn.className = 'proj-tab' + (currentProject === p.id ? ' active' : '');
+        btn.setAttribute('data-id', p.id);
+        var nameSpan = document.createElement('span');
+        nameSpan.textContent = p.name;
+        btn.appendChild(nameSpan);
+        var delSpan = document.createElement('span');
+        delSpan.className = 'proj-del';
+        delSpan.textContent = '✕';
+        delSpan.onclick = function(e) { e.stopPropagation(); deleteProject(p.id); };
+        btn.appendChild(delSpan);
+        btn.onclick = function() { selectProject(p.id, btn); };
+        bar.appendChild(btn);
+      });
+      var addBtn = document.createElement('button');
+      addBtn.className = 'proj-add-btn';
+      addBtn.textContent = '+';
+      addBtn.title = 'new project';
+      addBtn.onclick = openAddProject;
+      bar.appendChild(addBtn);
+    }
+
+    function selectProject(id, btn) {
+      currentProject = id;
+      document.querySelectorAll('.proj-tab').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      loadTasks();
+    }
+
+    async function loadTasks() {
+      try {
+        var url = '/api/tasks' + (currentProject !== 'all' ? '?project_id=' + currentProject : '');
+        var res = await fetch(url);
+        tasks = await res.json();
+        if (!Array.isArray(tasks)) tasks = [];
+        render();
+      } catch(e) { toast('error loading tasks'); }
+    }
+
+    function openAddProject() {
+      document.getElementById('modalOverlay').classList.add('open');
+      setTimeout(function() { document.getElementById('projNameInput').focus(); }, 50);
+    }
+
+    function closeAddProject(e) {
+      if (e && e.target !== document.getElementById('modalOverlay')) return;
+      document.getElementById('modalOverlay').classList.remove('open');
+      document.getElementById('projNameInput').value = '';
+    }
+
+    async function addProject() {
+      var name = document.getElementById('projNameInput').value.trim();
+      if (!name) { toast('enter a project name'); return; }
+      try {
+        var res = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name })
+        });
+        var proj = await res.json();
+        if (proj.error) throw new Error(proj.error);
+        projects.push(proj);
+        document.getElementById('modalOverlay').classList.remove('open');
+        document.getElementById('projNameInput').value = '';
+        renderProjects();
+        selectProject(proj.id, document.querySelector('[data-id="' + proj.id + '"]'));
+        toast('project created');
+      } catch(e) { toast('error: ' + e.message); }
+    }
+
+    async function deleteProject(id) {
+      if (!confirm('delete this project? tasks will remain without a project.')) return;
+      try {
+        await fetch('/api/projects/' + id, { method: 'DELETE' });
+        projects = projects.filter(function(p) { return p.id !== id; });
+        if (currentProject === id) currentProject = 'all';
+        renderProjects();
+        loadTasks();
+        toast('project deleted');
+      } catch(e) { toast('error'); }
+    }
+
+    function setFilter(f, btn) {
+      filter = f;
+      document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      render();
+    }
+
+    function filtered() {
+      return tasks.filter(function(t) {
+        if (filter === 'active') return t.status !== 'done';
+        if (filter === 'done') return t.status === 'done';
+        if (filter === 'high') return t.priority === 'high' && t.status !== 'done';
+        return true;
+      });
+    }
+
+    function fmtDate(d) {
+      if (!d) return null;
+      var p = d.split('T')[0].split('-');
+      return p[2] + '/' + p[1] + '/' + p[0].slice(2);
+    }
+
+    function overdue(t) {
+      if (!t.due_date || t.status === 'done') return false;
+      return new Date(t.due_date) < new Date(new Date().toDateString());
+    }
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function projectName(pid) {
+      if (!pid) return null;
+      var p = projects.find(function(x) { return x.id === pid; });
+      return p ? p.name : null;
+    }
+
+    function render() {
+      var list = filtered();
+      var active = list.filter(function(t) { return t.status !== 'done'; });
+      var done = list.filter(function(t) { return t.status === 'done'; });
+      var html = '';
+      if (!active.length && !done.length) {
+        html = '<div class="empty">no tasks</div>';
+      } else {
+        if (active.length) html += group('pending', active);
+        if (done.length) html += group('done', done);
+      }
+      document.getElementById('taskList').innerHTML = html;
+    }
+
+    function group(label, items) {
+      var h = '<div class="task-group">';
+      h += '<div class="section-label">' + label + ' <span class="count">' + items.length + '</span></div>';
+      items.forEach(function(t) {
+        var isDone = t.status === 'done';
+        var od = overdue(t);
+        var pname = currentProject === 'all' ? projectName(t.project_id) : null;
+        h += '<div class="task-item' + (isDone ? ' done' : '') + '">';
+        h += '<div class="checkbox' + (isDone ? ' checked' : '') + '" onclick="toggle(\'' + t.id + '\',' + isDone + ')"></div>';
+        h += '<div class="task-body">';
+        h += '<div class="task-title">' + esc(t.title) + '</div>';
+        if (t.description) h += '<div class="task-desc">' + esc(t.description) + '</div>';
+        h += '<div class="task-meta">';
+        if (t.priority === 'high') h += '<span class="tag high">high</span>';
+        if (t.priority === 'low') h += '<span class="tag low">low</span>';
+        if (t.due_date) h += '<span class="tag ' + (od ? 'overdue' : 'due') + '">' + (od ? 'overdue · ' : '') + fmtDate(t.due_date) + '</span>';
+        if (pname) h += '<span class="tag project">' + esc(pname) + '</span>';
+        h += '</div></div>';
+        h += '<div class="task-actions"><button class="icon-btn" onclick="del(\'' + t.id + '\')" title="delete">✕</button></div>';
+        h += '</div>';
+      });
+      return h + '</div>';
+    }
+
+    async function addTask() {
+      var title = document.getElementById('titleInput').value.trim();
+      if (!title) { toast('enter a task title'); return; }
+      var payload = {
+        title: title,
+        description: document.getElementById('descInput').value.trim() || null,
+        priority: document.getElementById('priorityInput').value,
+        due_date: document.getElementById('dueDateInput').value || null,
+        project_id: currentProject !== 'all' ? currentProject : null
+      };
+      try {
+        var res = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        var task = await res.json();
+        if (task.error) throw new Error(task.error);
+        tasks.unshift(task);
+        document.getElementById('titleInput').value = '';
+        document.getElementById('descInput').value = '';
+        document.getElementById('dueDateInput').value = '';
+        document.getElementById('priorityInput').value = 'normal';
+        render();
+        toast('task added');
+      } catch(e) { toast('error: ' + e.message); }
+    }
+
+    async function toggle(id, wasDone) {
+      try {
+        var res = await fetch('/api/tasks/' + id, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: wasDone ? 'todo' : 'done' })
+        });
+        var updated = await res.json();
+        tasks = tasks.map(function(t) { return t.id === id ? updated : t; });
+        render();
+      } catch(e) { toast('error'); }
+    }
+
+    async function del(id) {
+      try {
+        await fetch('/api/tasks/' + id, { method: 'DELETE' });
+        tasks = tasks.filter(function(t) { return t.id !== id; });
+        render();
+        toast('deleted');
+      } catch(e) { toast('error'); }
+    }
+
+    function toast(msg) {
+      var el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(function() { el.classList.remove('show'); }, 2200);
+    }
+
+    document.getElementById('titleInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') addTask();
+    });
+    document.getElementById('projNameInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') addProject();
+      if (e.key === 'Escape') closeAddProject();
+    });
+
     load();
   </script>
 </body>

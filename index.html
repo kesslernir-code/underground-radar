@@ -85,14 +85,17 @@
     .tag.project { color:var(--accent); border-color:rgba(200,255,0,0.2); }
     .tag.cal { color:#4285f4; border-color:rgba(66,133,244,0.3); cursor:pointer; display:inline-flex; align-items:center; gap:3px; background:none; font-family:inherit; }
     .tag.cal:hover { background:rgba(66,133,244,0.1); }
-    .task-actions { flex-shrink:0; }
+    .task-actions { flex-shrink:0; display:flex; flex-direction:column; gap:4px; }
     .icon-btn { background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:13px; padding:3px; border-radius:4px; transition:color 0.15s; line-height:1; }
     .icon-btn:hover { color:var(--red); }
+    .icon-btn.edit:hover { color:var(--accent); }
     .empty { text-align:center; padding:40px 0; color:var(--text-muted); font-size:13px; }
     .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; align-items:center; justify-content:center; }
     .modal-overlay.open { display:flex; }
-    .modal { background:var(--surface); border:1px solid var(--border-hover); border-radius:10px; padding:24px; width:300px; max-width:90vw; }
+    .modal { background:var(--surface); border:1px solid var(--border-hover); border-radius:10px; padding:24px; width:380px; max-width:95vw; }
     .modal h2 { font-size:14px; font-weight:400; margin-bottom:14px; }
+    .modal .form-row { margin-bottom:10px; }
+    .modal .form-row:last-child { margin-bottom:0; }
     .modal-row { display:flex; gap:8px; }
     .toast { position:fixed; bottom:24px; left:24px; background:var(--surface2); border:1px solid var(--border-hover); border-radius:10px; color:var(--text-primary); font-size:13px; padding:14px 16px; opacity:0; pointer-events:none; transform:translateY(8px); transition:all 0.2s; z-index:100; min-width:200px; }
     .toast.show { opacity:1; pointer-events:auto; transform:translateY(0); }
@@ -174,6 +177,7 @@
     </div>
   </div>
 
+  <!-- Add Project Modal -->
   <div class="modal-overlay" id="modalOverlay" onclick="closeAddProject(event)">
     <div class="modal">
       <h2>פרויקט חדש</h2>
@@ -181,6 +185,42 @@
         <input id="projNameInput" type="text" placeholder="שם פרויקט..." autocomplete="off"/>
         <button class="btn" onclick="addProject()">הוסף</button>
         <button class="btn-ghost" onclick="closeAddProject()">ביטול</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Task Modal -->
+  <div class="modal-overlay" id="editModalOverlay" onclick="closeEditTask(event)">
+    <div class="modal">
+      <h2>עריכת משימה</h2>
+      <div class="form-row">
+        <input id="editTitleInput" type="text" placeholder="כותרת..." autocomplete="off"/>
+      </div>
+      <div class="form-row">
+        <textarea id="editDescInput" placeholder="הערות (אופציונלי)"></textarea>
+      </div>
+      <div class="form-row">
+        <select id="editPriorityInput">
+          <option value="normal">עדיפות: רגילה</option>
+          <option value="high">עדיפות: גבוהה</option>
+          <option value="low">עדיפות: נמוכה</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="date-wrap" style="width:100%">
+          <div class="date-display" id="editDateDisplay" style="min-width:unset;width:100%">
+            <span>📅</span>
+            <span id="editDateLabel">תאריך יעד</span>
+          </div>
+          <input id="editDueDateInput" type="date" onchange="onEditDateChange(this)"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <select id="editProjectInput"></select>
+      </div>
+      <div class="modal-row">
+        <button class="btn" onclick="saveEdit()">שמור</button>
+        <button class="btn-ghost" onclick="closeEditTask()">ביטול</button>
       </div>
     </div>
   </div>
@@ -195,6 +235,7 @@
   <script>
     var tasks=[], projects=[], filter='all', currentProject='all';
     var _calUrl=null, toastTimer=null;
+    var editingId=null;
 
     function gcalUrl(title, date, desc) {
       var d = date.replace(/-/g,'');
@@ -204,16 +245,23 @@
         +(desc?'&details='+encodeURIComponent(desc):'');
     }
 
-    function goToCalendar() {
-      if (_calUrl) location.href = _calUrl;
-    }
-
-    function openCalTag(url) {
-      location.href = url;
-    }
+    function goToCalendar() { if (_calUrl) location.href = _calUrl; }
+    function openCalTag(url) { location.href = url; }
 
     function onDateChange(input) {
       var lbl=document.getElementById('dateLabel'), disp=document.getElementById('dateDisplay');
+      if (input.value) {
+        var p=input.value.split('-');
+        lbl.textContent=p[2]+'/'+p[1]+'/'+p[0].slice(2);
+        disp.classList.add('has-date');
+      } else {
+        lbl.textContent='תאריך יעד';
+        disp.classList.remove('has-date');
+      }
+    }
+
+    function onEditDateChange(input) {
+      var lbl=document.getElementById('editDateLabel'), disp=document.getElementById('editDateDisplay');
       if (input.value) {
         var p=input.value.split('-');
         lbl.textContent=p[2]+'/'+p[1]+'/'+p[0].slice(2);
@@ -315,6 +363,56 @@
         renderSidebar(); loadTasks(); toast('פרויקט נמחק');
       }catch(e){toast('שגיאה');}
     }
+
+    function openEditTask(id) {
+      var t = tasks.find(function(x){return x.id===id;});
+      if (!t) return;
+      editingId = id;
+      document.getElementById('editTitleInput').value = t.title;
+      document.getElementById('editDescInput').value = t.description || '';
+      document.getElementById('editPriorityInput').value = t.priority || 'normal';
+      var dateVal = t.due_date ? t.due_date.split('T')[0] : '';
+      document.getElementById('editDueDateInput').value = dateVal;
+      onEditDateChange(document.getElementById('editDueDateInput'));
+      // populate project select
+      var sel = document.getElementById('editProjectInput');
+      sel.innerHTML = '<option value="">ללא פרויקט</option>';
+      projects.forEach(function(p){
+        var opt = document.createElement('option');
+        opt.value = p.id; opt.textContent = p.name;
+        if (t.project_id === p.id) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      document.getElementById('editModalOverlay').classList.add('open');
+      setTimeout(function(){document.getElementById('editTitleInput').focus();},50);
+    }
+    function closeEditTask(e) {
+      if (e && e.target !== document.getElementById('editModalOverlay')) return;
+      document.getElementById('editModalOverlay').classList.remove('open');
+      editingId = null;
+    }
+    async function saveEdit() {
+      var title = document.getElementById('editTitleInput').value.trim();
+      if (!title) { toast('הכנס כותרת'); return; }
+      var updates = {
+        title: title,
+        description: document.getElementById('editDescInput').value.trim() || null,
+        priority: document.getElementById('editPriorityInput').value,
+        due_date: document.getElementById('editDueDateInput').value || null,
+        project_id: document.getElementById('editProjectInput').value || null
+      };
+      try {
+        var res = await fetch('/api/tasks/'+editingId, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updates)});
+        var updated = await res.json();
+        if (updated.error) throw new Error(updated.error);
+        tasks = tasks.map(function(t){return t.id===editingId?updated:t;});
+        document.getElementById('editModalOverlay').classList.remove('open');
+        editingId = null;
+        render();
+        toast('משימה עודכנה');
+      } catch(e) { toast('שגיאה: '+e.message); }
+    }
+
     function setFilter(f,btn){
       filter=f;
       document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active');});
@@ -358,8 +456,11 @@
         var isDone=t.status==='done', od=overdue(t);
         var pname=currentProject==='all'?projectName(t.project_id):null;
         var dateStr=t.due_date?t.due_date.split('T')[0]:null;
-        h+='<div class="task-item'+(isDone?' done':'')+'">';
-        h+='<div class="task-actions"><button class="icon-btn" onclick="del(\''+t.id+'\')" title="מחק">✕</button></div>';
+        h+='<div class="task-item'+(isDone?' done':'')+"'>";
+        h+='<div class="task-actions">';
+        h+='<button class="icon-btn" onclick="del(\''+t.id+'\')" title="מחק">✕</button>';
+        h+='<button class="icon-btn edit" onclick="openEditTask(\''+t.id+'\')" title="ערוך">✎</button>';
+        h+='</div>';
         h+='<div class="task-body"><div class="task-title">'+esc(t.title)+'</div>';
         if(t.description) h+='<div class="task-desc">'+esc(t.description)+'</div>';
         h+='<div class="task-meta">';
@@ -373,7 +474,7 @@
           }
         }
         if(pname) h+='<span class="tag project">'+esc(pname)+'</span>';
-        h+='</div></div><div class="checkbox'+(isDone?' checked':'')+'" onclick="toggle(\''+t.id+'\',' +isDone+')"></div></div>';
+        h+='</div></div><div class="checkbox'+(isDone?' checked':'')+"' onclick=\"toggle('"+t.id+"',"+isDone+")\"></div></div>";
       });
       return h+'</div>';
     }
@@ -414,6 +515,10 @@
     document.getElementById('projNameInput').addEventListener('keydown',function(e){
       if(e.key==='Enter')addProject();
       if(e.key==='Escape')closeAddProject();
+    });
+    document.getElementById('editTitleInput').addEventListener('keydown',function(e){
+      if(e.key==='Enter')saveEdit();
+      if(e.key==='Escape')closeEditTask();
     });
     load();
   </script>
